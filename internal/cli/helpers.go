@@ -393,6 +393,10 @@ func replacePathParam(path, name, value string) string {
 	return strings.ReplaceAll(path, "{"+name+"}", url.PathEscape(value))
 }
 
+func endpointPath(segments ...string) string {
+	return "/" + strings.Join(segments, "/")
+}
+
 // paginatedGet fetches pages and concatenates array results. The headers
 // argument carries per-endpoint required headers (e.g. cal-api-version) that
 // must be sent on every page request, including the first; pass nil when the

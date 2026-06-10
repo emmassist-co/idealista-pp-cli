@@ -12,20 +12,20 @@ import (
 )
 
 func newHomePromotedCmd(flags *rootFlags) *cobra.Command {
+	path := endpointPath("home", "searchbox", "operation-typology")
 
 	cmd := &cobra.Command{
 		Use:         "home",
-		Short:       "GET /home/searchbox/operation-typology",
-		Long:        "GET /home/searchbox/operation-typology",
+		Short:       "GET home/searchbox/operation-typology",
+		Long:        "GET home/searchbox/operation-typology",
 		Example:     "  idealista-pp-cli home",
-		Annotations: map[string]string{"pp:endpoint": "home.list_operation_typology", "pp:method": "GET", "pp:path": "/home/searchbox/operation-typology", "mcp:read-only": "true"},
+		Annotations: map[string]string{"pp:endpoint": "home.list_operation_typology", "pp:method": "GET", "pp:path": "home/searchbox/operation-typology", "mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := flags.newClient()
 			if err != nil {
 				return err
 			}
 
-			path := "/home/searchbox/operation-typology"
 			params := map[string]string{}
 			data, prov, err := resolveReadWithStrategy(cmd.Context(), c, flags, "auto", "home", false, path, params, nil, cmd.ErrOrStderr())
 			if err != nil {

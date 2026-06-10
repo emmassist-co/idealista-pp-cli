@@ -1208,12 +1208,12 @@ func knownSyncResourceNames() []string {
 // this preserves the actual endpoint path like "/ISteamApps/GetAppList/v2".
 func syncResourcePath(resource string) (string, error) {
 	paths := map[string]string{
-		"home":                   "/home/searchbox/operation-typology",
-		"login-and-register-api": "/login-and-register-api/lara/sl/od",
-		"pt":                     "/pt/detail/pager",
-		"pt-ajax-listing-controller-ad-contact-info-for-detail-ajax": "/pt/ajax/listingController/adContactInfoForDetail.ajax",
-		"pt-home-user-searches":          "/pt/home/user-searches",
-		"pt-locations-suggest-sale-home": "/pt/locationsSuggest/sale/home",
+		"home":                                           endpointPath("home", "searchbox", "operation-typology"),
+		"login-and-register-api":                         endpointPath("login-and-register-api", "lara", "sl", "od"),
+		"pt":                                             endpointPath("pt", "detail", "pager"),
+		"pt-ajax-listing-controller-ad-contact-info-for-detail-ajax": endpointPath("pt", "ajax", "listingController", "adContactInfoForDetail.ajax"),
+		"pt-home-user-searches":                          endpointPath("pt", "home", "user-searches"),
+		"pt-locations-suggest-sale-home":                 endpointPath("pt", "locationsSuggest", "sale", "home"),
 	}
 	if p, ok := paths[resource]; ok {
 		return p, nil

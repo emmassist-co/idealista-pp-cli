@@ -12,19 +12,19 @@ import (
 )
 
 func newPtListUserSearchesCmd(flags *rootFlags) *cobra.Command {
+	path := endpointPath("pt", "home", "user-searches")
 
 	cmd := &cobra.Command{
 		Use:         "list-user-searches",
-		Short:       "GET /pt/home/user-searches",
+		Short:       "GET pt home user-searches",
 		Example:     "  idealista-pp-cli pt list-user-searches",
-		Annotations: map[string]string{"pp:endpoint": "pt.list_user_searches", "pp:method": "GET", "pp:path": "/pt/home/user-searches", "mcp:read-only": "true"},
+		Annotations: map[string]string{"pp:endpoint": "pt.list_user_searches", "pp:method": "GET", "pp:path": "pt-home-user-searches", "mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := flags.newClient()
 			if err != nil {
 				return err
 			}
 
-			path := "/pt/home/user-searches"
 			params := map[string]string{}
 			data, prov, err := resolveReadWithStrategy(cmd.Context(), c, flags, "auto", "pt", false, path, params, nil, cmd.ErrOrStderr())
 			if err != nil {

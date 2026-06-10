@@ -43,28 +43,28 @@ This CLI uses Chrome-compatible HTTP transport over HTTP/3 for browser-facing en
 
 **addetail-recommendation** — Detail recommendation modules
 
-- `idealista-pp-cli addetail-recommendation <addetail_recommendation_id>` — GET /addetail-recommendation/{addetail_recommendation_id}
+- `idealista-pp-cli addetail-recommendation <addetail_recommendation_id>` — GET addetail-recommendation {addetail_recommendation_id}
 
 **detail** — Listing detail metadata
 
-- `idealista-pp-cli detail <detail_id>` — GET /detail/{detail_id}/datalayer
+- `idealista-pp-cli detail <detail_id>` — GET detail {detail_id} datalayer
 
 **home** — Home and search-box metadata
 
-- `idealista-pp-cli home` — GET /home/searchbox/operation-typology
+- `idealista-pp-cli home` — GET home searchbox operation-typology
 
 **login-and-register-api** — Session and login-state helpers
 
-- `idealista-pp-cli login-and-register-api` — GET /login-and-register-api/lara/sl/od
+- `idealista-pp-cli login-and-register-api` — GET login-and-register-api lara sl od
 
 **pt** — Portuguese portal endpoints
 
-- `idealista-pp-cli pt get-configuration` — GET /pt/detail/{detail_id}/configuration
-- `idealista-pp-cli pt get-open-detail-gallery` — GET /pt/openDetailGallery/{opendetailgallery_id}
-- `idealista-pp-cli pt list-ad-contact-info-for-detail.ajax` — GET /pt/ajax/listingController/adContactInfoForDetail.ajax
-- `idealista-pp-cli pt list-home` — GET /pt/locationsSuggest/sale/home
-- `idealista-pp-cli pt list-pager` — GET /pt/detail/pager
-- `idealista-pp-cli pt list-user-searches` — GET /pt/home/user-searches
+- `idealista-pp-cli pt get-configuration` — GET pt detail {detail_id} configuration
+- `idealista-pp-cli pt get-open-detail-gallery` — GET pt openDetailGallery {opendetailgallery_id}
+- `idealista-pp-cli pt list-ad-contact-info-for-detail.ajax` — GET pt ajax listingController adContactInfoForDetail.ajax
+- `idealista-pp-cli pt list-home` — GET pt locationsSuggest sale home
+- `idealista-pp-cli pt list-pager` — GET pt detail pager
+- `idealista-pp-cli pt list-user-searches` — GET pt home user-searches
 
 **search** — Website-native search helpers plus local FTS
 

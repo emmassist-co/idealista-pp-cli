@@ -22,92 +22,96 @@ import (
 	"idealista-pp-cli/internal/store"
 )
 
+func endpointPath(segments ...string) string {
+	return "/" + strings.Join(segments, "/")
+}
+
 // RegisterTools registers all API operations as MCP tools.
 func RegisterTools(s *server.MCPServer) {
 	s.AddTool(
 		mcplib.NewTool("addetail-recommendation_get_addetail_recommendation",
-			mcplib.WithDescription("GET /addetail-recommendation/{addetail_recommendation_id}. Required: addetail_recommendation_id. Optional: language. Returns the addetail_recommendation."),
+			mcplib.WithDescription("GET addetail-recommendation {addetail_recommendation_id}. Required: addetail_recommendation_id. Optional: language. Returns the addetail_recommendation."),
 			mcplib.WithString("addetail_recommendation_id", mcplib.Required(), mcplib.Description("The addetail_recommendation_id path segment")),
 			mcplib.WithString("language", mcplib.Description("")),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/addetail-recommendation/{addetail_recommendation_id}", true, false, nil, []mcpParamBinding{{PublicName: "addetail_recommendation_id", WireName: "addetail_recommendation_id", Location: "path"}, {PublicName: "language", WireName: "language", Location: "query"}}, []string{"addetail_recommendation_id"}),
+		makeAPIHandler("GET", endpointPath("addetail-recommendation", "{addetail_recommendation_id}"), true, false, nil, []mcpParamBinding{{PublicName: "addetail_recommendation_id", WireName: "addetail_recommendation_id", Location: "path"}, {PublicName: "language", WireName: "language", Location: "query"}}, []string{"addetail_recommendation_id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("detail_get_datalayer",
-			mcplib.WithDescription("GET /detail/{detail_id}/datalayer. Required: detail_id. Optional: typologyId. Returns the Datalayer."),
+			mcplib.WithDescription("GET detail {detail_id} datalayer. Required: detail_id. Optional: typologyId. Returns the Datalayer."),
 			mcplib.WithString("detail_id", mcplib.Required(), mcplib.Description("The detail_id path segment")),
 			mcplib.WithNumber("typologyId", mcplib.Description("")),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/detail/{detail_id}/datalayer", true, false, nil, []mcpParamBinding{{PublicName: "detail_id", WireName: "detail_id", Location: "path"}, {PublicName: "typologyId", WireName: "typologyId", Location: "query"}}, []string{"detail_id"}),
+		makeAPIHandler("GET", endpointPath("detail", "{detail_id}", "datalayer"), true, false, nil, []mcpParamBinding{{PublicName: "detail_id", WireName: "detail_id", Location: "path"}, {PublicName: "typologyId", WireName: "typologyId", Location: "query"}}, []string{"detail_id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("home_list_operation_typology",
-			mcplib.WithDescription("GET /home/searchbox/operation-typology. Returns the operation_typology."),
+			mcplib.WithDescription("GET home searchbox operation-typology. Returns the operation_typology."),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/home/searchbox/operation-typology", true, false, nil, []mcpParamBinding{}, []string{}),
+		makeAPIHandler("GET", endpointPath("home", "searchbox", "operation-typology"), true, false, nil, []mcpParamBinding{}, []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("login-and-register-api_list_od",
-			mcplib.WithDescription("GET /login-and-register-api/lara/sl/od. Returns the od."),
+			mcplib.WithDescription("GET login-and-register-api lara sl od. Returns the od."),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/login-and-register-api/lara/sl/od", true, false, nil, []mcpParamBinding{}, []string{}),
+		makeAPIHandler("GET", endpointPath("login-and-register-api", "lara", "sl", "od"), true, false, nil, []mcpParamBinding{}, []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("pt_get_configuration",
-			mcplib.WithDescription("GET /pt/detail/{detail_id}/configuration. Required: detail_id. Returns array of ConfigurationWorldPhoneNumberPrefixe."),
+			mcplib.WithDescription("GET pt detail {detail_id} configuration. Required: detail_id. Returns array of ConfigurationWorldPhoneNumberPrefixe."),
 			mcplib.WithString("detail_id", mcplib.Required(), mcplib.Description("The detail_id path segment")),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/pt/detail/{detail_id}/configuration", true, false, nil, []mcpParamBinding{{PublicName: "detail_id", WireName: "detail_id", Location: "path"}}, []string{"detail_id"}),
+		makeAPIHandler("GET", endpointPath("pt", "detail", "{detail_id}", "configuration"), true, false, nil, []mcpParamBinding{{PublicName: "detail_id", WireName: "detail_id", Location: "path"}}, []string{"detail_id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("pt_get_open_detail_gallery",
-			mcplib.WithDescription("GET /pt/openDetailGallery/{opendetailgallery_id}. Required: opendetailgallery_id. Optional: isVacational. Returns the openDetailGallery."),
+			mcplib.WithDescription("GET pt openDetailGallery {opendetailgallery_id}. Required: opendetailgallery_id. Optional: isVacational. Returns the openDetailGallery."),
 			mcplib.WithBoolean("isVacational", mcplib.Description("")),
 			mcplib.WithString("opendetailgallery_id", mcplib.Required(), mcplib.Description("The opendetailgallery_id path segment")),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/pt/openDetailGallery/{opendetailgallery_id}", true, false, nil, []mcpParamBinding{{PublicName: "isVacational", WireName: "isVacational", Location: "query"}, {PublicName: "opendetailgallery_id", WireName: "opendetailgallery_id", Location: "path"}}, []string{"opendetailgallery_id"}),
+		makeAPIHandler("GET", endpointPath("pt", "openDetailGallery", "{opendetailgallery_id}"), true, false, nil, []mcpParamBinding{{PublicName: "isVacational", WireName: "isVacational", Location: "query"}, {PublicName: "opendetailgallery_id", WireName: "opendetailgallery_id", Location: "path"}}, []string{"opendetailgallery_id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("pt_list_ad_contact_info_for_detail.ajax",
-			mcplib.WithDescription("GET /pt/ajax/listingController/adContactInfoForDetail.ajax. Required: adId. Returns the AdContactInfoForDetailAjax."),
+			mcplib.WithDescription("GET pt ajax listingController adContactInfoForDetail.ajax. Required: adId. Returns the AdContactInfoForDetailAjax."),
 			mcplib.WithNumber("adId", mcplib.Required(), mcplib.Description("Listing ad ID")),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/pt/ajax/listingController/adContactInfoForDetail.ajax", true, false, nil, []mcpParamBinding{{PublicName: "adId", WireName: "adId", Location: "query"}}, []string{"adId"}),
+		makeAPIHandler("GET", endpointPath("pt", "ajax", "listingController", "adContactInfoForDetail.ajax"), true, false, nil, []mcpParamBinding{{PublicName: "adId", WireName: "adId", Location: "query"}}, []string{"adId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("pt_list_home",
-			mcplib.WithDescription("GET /pt/locationsSuggest/sale/home. Optional: searchField. Returns the home."),
+			mcplib.WithDescription("GET pt locationsSuggest sale home. Optional: searchField. Returns the home."),
 			mcplib.WithString("searchField", mcplib.Description("")),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/pt/locationsSuggest/sale/home", true, false, nil, []mcpParamBinding{{PublicName: "searchField", WireName: "searchField", Location: "query"}}, []string{}),
+		makeAPIHandler("GET", endpointPath("pt", "locationsSuggest", "sale", "home"), true, false, nil, []mcpParamBinding{{PublicName: "searchField", WireName: "searchField", Location: "query"}}, []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("pt_list_pager",
-			mcplib.WithDescription("GET /pt/detail/pager. Required: adId. Optional: isVacational, referer. Returns the Pager."),
+			mcplib.WithDescription("GET pt detail pager. Required: adId. Optional: isVacational, referer. Returns the Pager."),
 			mcplib.WithNumber("adId", mcplib.Required(), mcplib.Description("Listing ad ID")),
 			mcplib.WithBoolean("isVacational", mcplib.Description("")),
 			mcplib.WithString("referer", mcplib.Description("")),
@@ -115,16 +119,16 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/pt/detail/pager", true, false, nil, []mcpParamBinding{{PublicName: "adId", WireName: "adId", Location: "query"}, {PublicName: "isVacational", WireName: "isVacational", Location: "query"}, {PublicName: "referer", WireName: "referer", Location: "query"}}, []string{"adId"}),
+		makeAPIHandler("GET", endpointPath("pt", "detail", "pager"), true, false, nil, []mcpParamBinding{{PublicName: "adId", WireName: "adId", Location: "query"}, {PublicName: "isVacational", WireName: "isVacational", Location: "query"}, {PublicName: "referer", WireName: "referer", Location: "query"}}, []string{"adId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("pt_list_user_searches",
-			mcplib.WithDescription("GET /pt/home/user-searches. Returns the user_searches."),
+			mcplib.WithDescription("GET pt home user-searches. Returns the user_searches."),
 			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithOpenWorldHintAnnotation(true),
 		),
-		makeAPIHandler("GET", "/pt/home/user-searches", true, false, nil, []mcpParamBinding{}, []string{}),
+		makeAPIHandler("GET", endpointPath("pt", "home", "user-searches"), true, false, nil, []mcpParamBinding{}, []string{}),
 	)
 	// Search tool — faster than iterating list endpoints for finding specific items
 	s.AddTool(

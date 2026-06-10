@@ -171,7 +171,7 @@ func runSavedSearchSummary(cmd *cobra.Command, flags *rootFlags) error {
 	if err != nil {
 		return err
 	}
-	data, prov, err := resolveReadWithStrategy(cmd.Context(), c, flags, "auto", "pt", false, "/pt/home/user-searches", nil, nil, io.Discard)
+	data, prov, err := resolveReadWithStrategy(cmd.Context(), c, flags, "auto", "pt", false, endpointPath("pt", "home", "user-searches"), nil, nil, io.Discard)
 	if err != nil {
 		return classifyAPIError(err, flags)
 	}
