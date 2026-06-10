@@ -1,0 +1,9 @@
+{
+  "name": "idealista-site-cli",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Read-only CLI for curated Idealista.pt website workflows",
+  "scripts": {
+    "test": "./scripts/test.sh"
+  }
+}

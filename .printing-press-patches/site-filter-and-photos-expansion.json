@@ -1,0 +1,23 @@
+{
+  "schema_version": 2,
+  "id": "site-filter-and-photos-expansion",
+  "applied_at": "2026-06-10",
+  "base_run_id": "unknown",
+  "base_printing_press_version": "unknown",
+  "summary": "Expand the website search contract around georeach-backed filters and add a shaped listing photos workflow.",
+  "reason": "The generated website CLI only supported a narrow slug-only filter builder and exposed listing media through raw endpoint wrappers instead of an operator-friendly gallery command.",
+  "files": [
+    "internal/cli/root.go",
+    "internal/cli/search.go",
+    "internal/cli/search_results.go",
+    "internal/cli/search_test.go",
+    "internal/cli/listing_photos.go",
+    "internal/cli/listing_photos_test.go",
+    "internal/cli/site_dogfood_test.go",
+    "internal/cli/testdata/site_search_filters.json",
+    "internal/cli/which.go",
+    "README.md",
+    "SKILL.md"
+  ],
+  "validated_outcome": "The CLI now supports combined price and area ranges, expanded house filters, and a high-level listing photos command with fixture-backed and live smoke coverage."
+}

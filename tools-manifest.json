@@ -1,0 +1,168 @@
+{
+  "api_name": "idealista",
+  "base_url": "https://www.idealista.pt",
+  "description": "Curated website-facing CLI spec derived from an authorized Idealista.pt HAR capture.",
+  "mcp_ready": "full",
+  "http_transport": "browser-chrome-h3",
+  "auth": {
+    "type": "none"
+  },
+  "required_headers": [],
+  "tools": [
+    {
+      "name": "addetail-recommendation_get_addetail_recommendation",
+      "description": "GET /addetail-recommendation/{addetail_recommendation_id}. Required: addetail_recommendation_id. Optional: language. Returns the addetail_recommendation.",
+      "method": "GET",
+      "path": "/addetail-recommendation/{addetail_recommendation_id}",
+      "no_auth": true,
+      "params": [
+        {
+          "name": "addetail_recommendation_id",
+          "type": "string",
+          "location": "path",
+          "description": "The addetail_recommendation_id path segment",
+          "required": true
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "location": "query"
+        }
+      ]
+    },
+    {
+      "name": "detail_get_datalayer",
+      "description": "GET /detail/{detail_id}/datalayer. Required: detail_id. Optional: typologyId. Returns the Datalayer.",
+      "method": "GET",
+      "path": "/detail/{detail_id}/datalayer",
+      "no_auth": true,
+      "params": [
+        {
+          "name": "detail_id",
+          "type": "string",
+          "location": "path",
+          "description": "The detail_id path segment",
+          "required": true
+        },
+        {
+          "name": "typologyId",
+          "type": "integer",
+          "location": "query"
+        }
+      ]
+    },
+    {
+      "name": "home_list_operation_typology",
+      "description": "GET /home/searchbox/operation-typology. Returns the operation_typology.",
+      "method": "GET",
+      "path": "/home/searchbox/operation-typology",
+      "no_auth": true,
+      "params": []
+    },
+    {
+      "name": "login-and-register-api_list_od",
+      "description": "GET /login-and-register-api/lara/sl/od. Returns the od.",
+      "method": "GET",
+      "path": "/login-and-register-api/lara/sl/od",
+      "no_auth": true,
+      "params": []
+    },
+    {
+      "name": "pt_get_configuration",
+      "description": "GET /pt/detail/{detail_id}/configuration. Required: detail_id. Returns array of ConfigurationWorldPhoneNumberPrefixe.",
+      "method": "GET",
+      "path": "/pt/detail/{detail_id}/configuration",
+      "no_auth": true,
+      "params": [
+        {
+          "name": "detail_id",
+          "type": "string",
+          "location": "path",
+          "description": "The detail_id path segment",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "pt_get_open_detail_gallery",
+      "description": "GET /pt/openDetailGallery/{opendetailgallery_id}. Required: opendetailgallery_id. Optional: isVacational. Returns the openDetailGallery.",
+      "method": "GET",
+      "path": "/pt/openDetailGallery/{opendetailgallery_id}",
+      "no_auth": true,
+      "params": [
+        {
+          "name": "isVacational",
+          "type": "boolean",
+          "location": "query"
+        },
+        {
+          "name": "opendetailgallery_id",
+          "type": "string",
+          "location": "path",
+          "description": "The opendetailgallery_id path segment",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "pt_list_ad_contact_info_for_detail.ajax",
+      "description": "GET /pt/ajax/listingController/adContactInfoForDetail.ajax. Optional: adId. Returns the AdContactInfoForDetailAjax.",
+      "method": "GET",
+      "path": "/pt/ajax/listingController/adContactInfoForDetail.ajax",
+      "no_auth": true,
+      "params": [
+        {
+          "name": "adId",
+          "type": "integer",
+          "location": "query"
+        }
+      ]
+    },
+    {
+      "name": "pt_list_home",
+      "description": "GET /pt/locationsSuggest/sale/home. Optional: searchField. Returns the home.",
+      "method": "GET",
+      "path": "/pt/locationsSuggest/sale/home",
+      "no_auth": true,
+      "params": [
+        {
+          "name": "searchField",
+          "type": "string",
+          "location": "query"
+        }
+      ]
+    },
+    {
+      "name": "pt_list_pager",
+      "description": "GET /pt/detail/pager. Optional: adId, isVacational, referer. Returns the Pager.",
+      "method": "GET",
+      "path": "/pt/detail/pager",
+      "no_auth": true,
+      "params": [
+        {
+          "name": "adId",
+          "type": "integer",
+          "location": "query"
+        },
+        {
+          "name": "isVacational",
+          "type": "boolean",
+          "location": "query"
+        },
+        {
+          "name": "referer",
+          "type": "string",
+          "location": "query"
+        }
+      ]
+    },
+    {
+      "name": "pt_list_user_searches",
+      "description": "GET /pt/home/user-searches. Returns the user_searches.",
+      "method": "GET",
+      "path": "/pt/home/user-searches",
+      "no_auth": true,
+      "params": []
+    }
+  ]
+}

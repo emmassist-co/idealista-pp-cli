@@ -1,0 +1,48 @@
+[
+  {
+    "name": "combined_price_area_rooms",
+    "spec": {
+      "location_path": "comprar-casas/lisboa/arroios",
+      "min_price": 220000,
+      "max_price": 750000,
+      "min_size": 60,
+      "max_size": 120,
+      "bedrooms": [
+        "t2",
+        "t3",
+        "t4-t5"
+      ],
+      "bathrooms": [
+        2,
+        3
+      ]
+    },
+    "want_url": "/comprar-casas/lisboa/arroios/com-preco-max_750000,preco-min_220000,tamanho-min_60,tamanho-max_120,t2,t3,t4-t5,banho-2,banho-3/"
+  },
+  {
+    "name": "single_room_amenities_sort",
+    "spec": {
+      "location_path": "comprar-casas/lisboa/arroios",
+      "bedrooms": [
+        "t1",
+        "t4-t5"
+      ],
+      "amenities": [
+        "garagem",
+        "elevador"
+      ],
+      "sort": "atualizado-desc"
+    },
+    "want_url": "/comprar-casas/lisboa/arroios/com-t1,t4-t5,elevador,garagem/?ordem=atualizado-desc"
+  },
+  {
+    "name": "price_recency_energy",
+    "spec": {
+      "location_path": "comprar-casas/lisboa/arroios",
+      "max_price": 550000,
+      "published_within": "month",
+      "energy_class": "alta"
+    },
+    "want_url": "/comprar-casas/lisboa/arroios/com-preco-max_550000,eficiencia-energetica-alta,publicado_ultimo-mes/"
+  }
+]

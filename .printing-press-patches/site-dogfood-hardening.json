@@ -1,0 +1,24 @@
+{
+  "schema_version": 2,
+  "id": "site-dogfood-hardening",
+  "applied_at": "2026-06-10",
+  "base_run_id": "unknown",
+  "base_printing_press_version": "unknown",
+  "summary": "Harden website search discovery, required input validation, and the validated filter surface from live dogfood findings.",
+  "reason": "The generated website CLI exposed misleading live search behavior, weak capability discovery, and known-required endpoint inputs only through upstream HTTP failures instead of the local CLI contract.",
+  "files": [
+    "internal/cli/which.go",
+    "internal/cli/which_test.go",
+    "internal/cli/pt_list_pager.go",
+    "internal/cli/pt_list_adContactInfoForDetail.ajax.go",
+    "internal/cli/search.go",
+    "internal/cli/search_results.go",
+    "internal/cli/search_test.go",
+    "internal/cli/site_dogfood_test.go",
+    "internal/cli/testdata/site_search_filters.json",
+    "internal/mcp/tools.go",
+    "README.md",
+    "SKILL.md"
+  ],
+  "validated_outcome": "The CLI now refuses generic live website search, exposes explicit website-native search helpers, validates ad-id locally, and includes an opt-in live dogfood harness."
+}

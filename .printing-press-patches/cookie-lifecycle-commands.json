@@ -1,0 +1,22 @@
+{
+  "schema_version": 2,
+  "id": "cookie-lifecycle-commands",
+  "applied_at": "2026-06-10",
+  "base_run_id": "unknown",
+  "base_printing_press_version": "unknown",
+  "summary": "Add first-class website cookie lifecycle commands and shared session diagnostics.",
+  "reason": "The generated website CLI accepted Cookie headers but lacked operator commands for setting, clearing, sourcing, and validating that session state.",
+  "files": [
+    "internal/config/config.go",
+    "internal/config/config_test.go",
+    "internal/cli/root.go",
+    "internal/cli/cookie.go",
+    "internal/cli/cookie_test.go",
+    "internal/cli/doctor.go",
+    "internal/cli/doctor_test.go",
+    "internal/cli/which.go",
+    "internal/client/client.go",
+    "README.md"
+  ],
+  "validated_outcome": "Config-backed and env-backed cookie workflows are now surfaced through dedicated commands with masked output and local tests."
+}
