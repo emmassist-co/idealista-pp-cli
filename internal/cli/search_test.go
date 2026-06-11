@@ -211,6 +211,7 @@ func TestParseListingCards(t *testing.T) {
 <article class="item">
   <a class="item-link" href="/imovel/22222222/">Apartamento T3 em Penha de Franca</a>
   <span class="item-price">300.000 €</span>
+  <div class="listing-tags-container"><span class="listing-tags">Arrendada</span></div>
 </article>`)
 
 	got := parseListingCards(body)
@@ -231,6 +232,48 @@ func TestParseListingCards(t *testing.T) {
 	}
 	if got[1].ListingID != "22222222" {
 		t.Fatalf("second ListingID = %q", got[1].ListingID)
+	}
+	if len(got[1].Tags) != 1 || got[1].Tags[0] != "Arrendada" {
+		t.Fatalf("second Tags = %#v", got[1].Tags)
+	}
+}
+
+func TestSummarizeListingResultsPageBody(t *testing.T) {
+	body := []byte(`
+<div class="search-title-container h1-simulated">
+  <h1 id="h1-container">
+    <span id="h1-container__text">817 casas e apartamentos em Arroios, Lisboa</span>
+  </h1>
+</div>
+<section class="items-container items-list">
+  <article class="item item_contains_branding item-multimedia-container" data-element-id="35013037">
+    <a class="item-link" href="/imovel/35013037/" title="Apartamento T3">Apartamento T3</a>
+    <span class="item-price">299.000 €</span>
+  </article>
+</section>`)
+
+	page := summarizeListingResultsPageBody(body)
+	if page.ResultsTitle != "817 casas e apartamentos em Arroios, Lisboa" {
+		t.Fatalf("ResultsTitle = %q", page.ResultsTitle)
+	}
+	if page.TotalCount != 817 {
+		t.Fatalf("TotalCount = %d", page.TotalCount)
+	}
+	cards := parseListingCards(body)
+	if len(cards) != 1 || cards[0].ListingID != "35013037" {
+		t.Fatalf("cards = %#v", cards)
+	}
+}
+
+func TestExcludeTenantedCards(t *testing.T) {
+	cards := []listingSearchCard{
+		{ListingID: "1", Title: "A", Description: "Livre", Tags: nil},
+		{ListingID: "2", Title: "B", Tags: []string{"Arrendada"}},
+		{ListingID: "3", Title: "C", Description: "Atualmente arrendado por 500€/mês"},
+	}
+	got := excludeTenantedCards(cards)
+	if len(got) != 1 || got[0].ListingID != "1" {
+		t.Fatalf("excludeTenantedCards = %#v", got)
 	}
 }
 

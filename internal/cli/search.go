@@ -292,35 +292,29 @@ func newSearchTotalsLiveCmd(flags *rootFlags) *cobra.Command {
 func newSearchListingAjaxCmd(flags *rootFlags, use string, totals bool) *cobra.Command {
 	var spec searchResultsSpec
 	var includeRaw bool
+	var excludeTenanted bool
 
-	short := "Fetch the HAR-validated listing results endpoint"
+	short := "Fetch the current website results page and parse listing data"
 	if totals {
-		short = "Fetch the HAR-validated listing totals endpoint"
+		short = "Fetch the current website results page and extract the total count"
 	}
 	cmd := &cobra.Command{
 		Use:   use,
 		Short: short,
-		Long: `Call the website's internal listing AJAX endpoints using the same validated
-filter grammar as 'search results-url'. These endpoints were observed in the
-Idealista HAR captures and remain session-backed, so a usable website cookie is
-still required for live reads.`,
+		Long: `Fetch the canonical Idealista results page built by 'search results-url' and
+parse the current server-rendered listing cards from the HTML. This stays
+website-native, avoids browser automation, and tracks the live contract even
+when older AJAX endpoints drift out of use.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			derived, err := buildSearchResultsState(spec, currentBaseURL(flags))
 			if err != nil {
 				return usageErr(err)
 			}
-			path := derived.ListingAjaxPath
-			query := derived.ListingAjaxQuery
-			url := derived.ListingAjaxURL
-			if totals {
-				path = derived.TotalsAjaxPath
-				query = derived.TotalsAjaxQuery
-				url = derived.TotalsAjaxURL
-			}
+			path := derived.RelativeURL
+			url := strings.TrimRight(currentBaseURL(flags), "/") + path
 			payload := map[string]any{
 				"url":            url,
 				"path":           path,
-				"query":          query,
 				"validated_spec": spec,
 			}
 			if dryRunOK(flags) {
@@ -331,16 +325,27 @@ still required for live reads.`,
 			if err != nil {
 				return err
 			}
-			referer := strings.TrimRight(currentBaseURL(flags), "/") + derived.RelativeURL
-			data, err := fetchListingAjax(cmd.Context(), c, path, query, referer)
+			if err := validateResultsPagePath(path); err != nil {
+				return usageErr(err)
+			}
+			data, err := fetchListingResultsPage(cmd.Context(), c, path)
 			if err != nil {
-				return classifySearchValidationError(err, url, flags)
+				return classifyResultsPageError(err, url, flags)
 			}
 			if totals {
-				return outputWebsiteSearchPayload(cmd, flags, summarizeListingAjaxTotals(url, path, query, spec, data, includeRaw), DataProvenance{Source: "live"})
+				payload := summarizeListingResultsTotals(url, path, spec, data, includeRaw)
+				if excludeTenanted {
+					cards := excludeTenantedCards(parseListingCards(data))
+					payload["filtered_card_count"] = len(cards)
+					payload["filter_exclude_tenanted"] = true
+				}
+				return outputWebsiteSearchPayload(cmd, flags, payload, DataProvenance{Source: "live"})
 			}
-			payloadResults := summarizeListingAjaxResults(url, path, query, spec, data, includeRaw)
-			payloadResults.Query = query
+			payloadResults := summarizeListingResultsPage(url, path, spec, data, includeRaw)
+			if excludeTenanted {
+				payloadResults.Cards = excludeTenantedCards(payloadResults.Cards)
+				payloadResults.CardCount = len(payloadResults.Cards)
+			}
 			return outputWebsiteSearchPayload(cmd, flags, payloadResults, DataProvenance{Source: "live"})
 		},
 	}
@@ -356,6 +361,7 @@ still required for live reads.`,
 	cmd.Flags().StringVar(&spec.PublishedWithin, "published-within", "", "Validated recency window (48h,week,month)")
 	cmd.Flags().StringVar(&spec.Sort, "sort", "", "Validated sort order (preco_medio-asc, precos-asc, atualizado-desc)")
 	cmd.Flags().BoolVar(&includeRaw, "raw-body", false, "Include the raw AJAX response body for debugging")
+	cmd.Flags().BoolVar(&excludeTenanted, "exclude-tenanted", false, "Exclude listings marked or described as rented / tenant-occupied")
 	_ = cmd.MarkFlagRequired("location-path")
 	return cmd
 }
@@ -363,23 +369,24 @@ still required for live reads.`,
 func newSearchResultsEnrichedCmd(flags *rootFlags) *cobra.Command {
 	var spec searchResultsSpec
 	var shortlistLimit int
+	var excludeTenanted bool
 
 	cmd := &cobra.Command{
 		Use:   "results-enriched",
 		Short: "Fetch result cards first, then enrich a bounded shortlist of listings",
-		Long: `Call the HAR-validated listing results endpoint, parse listing cards, and
-enrich only a bounded shortlist through the existing listing detail endpoints.
-This stays website-native and conservative by default instead of fan-out over
-every result on the page.`,
+		Long: `Fetch the canonical website results page, parse current listing cards from the
+HTML, and enrich only a bounded shortlist through the existing listing detail
+endpoints. This stays website-native and conservative by default instead of
+fan-out over every result on the page.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			derived, err := buildSearchResultsState(spec, currentBaseURL(flags))
 			if err != nil {
 				return usageErr(err)
 			}
+			url := strings.TrimRight(currentBaseURL(flags), "/") + derived.RelativeURL
 			payload := map[string]any{
-				"url":             derived.ListingAjaxURL,
-				"path":            derived.ListingAjaxPath,
-				"query":           derived.ListingAjaxQuery,
+				"url":             url,
+				"path":            derived.RelativeURL,
 				"validated_spec":  spec,
 				"shortlist_limit": shortlistLimit,
 			}
@@ -391,12 +398,18 @@ every result on the page.`,
 			if err != nil {
 				return err
 			}
-			referer := strings.TrimRight(currentBaseURL(flags), "/") + derived.RelativeURL
-			data, err := fetchListingAjax(cmd.Context(), c, derived.ListingAjaxPath, derived.ListingAjaxQuery, referer)
-			if err != nil {
-				return classifySearchValidationError(err, derived.ListingAjaxURL, flags)
+			if err := validateResultsPagePath(derived.RelativeURL); err != nil {
+				return usageErr(err)
 			}
+			data, err := fetchListingResultsPage(cmd.Context(), c, derived.RelativeURL)
+			if err != nil {
+				return classifyResultsPageError(err, url, flags)
+			}
+			page := summarizeListingResultsPageBody(data)
 			cards := parseListingCards(data)
+			if excludeTenanted {
+				cards = excludeTenantedCards(cards)
+			}
 			selectedCards := shortlistCards(cards, shortlistLimit)
 			enriched := make([]listingInspectSummary, 0, len(selectedCards))
 			partialErrors := make([]string, 0)
@@ -417,11 +430,12 @@ every result on the page.`,
 				}
 				enriched = append(enriched, summary)
 			}
-			return outputWebsiteSearchPayload(cmd, flags, listingAjaxEnrichedPayload{
-				URL:            derived.ListingAjaxURL,
-				Path:           derived.ListingAjaxPath,
-				Query:          derived.ListingAjaxQuery,
+			return outputWebsiteSearchPayload(cmd, flags, listingResultsEnrichedPayload{
+				URL:            url,
+				Path:           derived.RelativeURL,
 				ValidatedSpec:  spec,
+				ResultsTitle:   page.ResultsTitle,
+				TotalCount:     page.TotalCount,
 				ParsedCount:    len(cards),
 				ShortlistLimit: shortlistLimit,
 				SelectedIDs:    selectedListingIDs(selectedCards),
@@ -443,6 +457,7 @@ every result on the page.`,
 	cmd.Flags().StringVar(&spec.PublishedWithin, "published-within", "", "Validated recency window (48h,week,month)")
 	cmd.Flags().StringVar(&spec.Sort, "sort", "", "Validated sort order (preco_medio-asc, precos-asc, atualizado-desc)")
 	cmd.Flags().IntVar(&shortlistLimit, "shortlist-limit", 3, "Maximum number of parsed listings to enrich")
+	cmd.Flags().BoolVar(&excludeTenanted, "exclude-tenanted", false, "Exclude listings marked or described as rented / tenant-occupied before shortlist enrichment")
 	_ = cmd.MarkFlagRequired("location-path")
 	return cmd
 }

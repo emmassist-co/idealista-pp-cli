@@ -13,6 +13,10 @@ import (
 )
 
 func executeCookieCommand(t *testing.T, args ...string) (stdout string, stderr string, err error) {
+	return executeCookieCommandWithInput(t, "", args...)
+}
+
+func executeCookieCommandWithInput(t *testing.T, input string, args ...string) (stdout string, stderr string, err error) {
 	t.Helper()
 	var flags rootFlags
 	cmd := newRootCmd(&flags)
@@ -20,6 +24,7 @@ func executeCookieCommand(t *testing.T, args ...string) (stdout string, stderr s
 	var errBuf bytes.Buffer
 	cmd.SetOut(&outBuf)
 	cmd.SetErr(&errBuf)
+	cmd.SetIn(strings.NewReader(input))
 	cmd.SetArgs(args)
 	err = cmd.Execute()
 	if err != nil && isCobraUsageError(err) {
@@ -137,5 +142,50 @@ func TestCookieSetDoesNotEchoSecret(t *testing.T) {
 	}
 	if !strings.Contains(string(data), secret) {
 		t.Fatalf("config file did not persist secret")
+	}
+}
+
+func TestCookieSetFromStdinStripsHeaderPrefix(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	input := "Cookie: datadome=abc; other=def\n"
+	if _, _, err := executeCookieCommandWithInput(t, input, "--config", path, "--json", "cookie", "set", "--stdin"); err != nil {
+		t.Fatalf("cookie set --stdin: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), "datadome=abc; other=def") {
+		t.Fatalf("config file did not persist stdin cookie: %s", string(data))
+	}
+	if strings.Contains(string(data), "Cookie: datadome=abc") {
+		t.Fatalf("config file preserved Cookie header prefix: %s", string(data))
+	}
+}
+
+func TestCookieSetupJSON(t *testing.T) {
+	stdout, _, err := executeCookieCommand(t, "--json", "cookie", "setup")
+	if err != nil {
+		t.Fatalf("cookie setup: %v", err)
+	}
+	if !strings.Contains(stdout, "\"steps\"") {
+		t.Fatalf("cookie setup missing steps: %s", stdout)
+	}
+	if !strings.Contains(stdout, "cookie set --stdin") {
+		t.Fatalf("cookie setup missing stdin guidance: %s", stdout)
+	}
+}
+
+func TestCookieSetupDryRunLaunch(t *testing.T) {
+	stdout, _, err := executeCookieCommand(t, "--json", "--dry-run", "cookie", "setup", "--launch")
+	if err != nil {
+		t.Fatalf("cookie setup --launch --dry-run: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if payload["launch"] != true {
+		t.Fatalf("cookie setup dry-run did not preserve launch flag: %#v", payload)
 	}
 }

@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "id": "cookie-set-stdin-restore",
+  "applied_at": "2026-06-11",
+  "base_run_id": "unknown",
+  "base_printing_press_version": "unknown",
+  "summary": "Restore stdin-backed cookie import so operators can paste a raw Cookie header directly into the CLI.",
+  "reason": "This worktree still advertised `cookie set --stdin` in the README but did not implement the flag, which became an immediate blocker once live verification needed a fresh website session again.",
+  "files": [
+    "internal/cli/cookie.go",
+    "internal/cli/cookie_test.go",
+    "README.md"
+  ],
+  "validated_outcome": "The CLI accepts `pbpaste | idealista-pp-cli cookie set --stdin`, strips a leading `Cookie: ` prefix, and the internal CLI/client/MCP test set passes."
+}

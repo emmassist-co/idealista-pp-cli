@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "id": "exclude-tenanted-search-filter",
+  "applied_at": "2026-06-11",
+  "base_run_id": "unknown",
+  "base_printing_press_version": "unknown",
+  "summary": "Add tenant-occupied listing exclusion to the live results, totals, and enriched-search workflows.",
+  "reason": "Student-rental screening needs an operator-safe way to drop listings already rented or sold with tenant occupancy, and the live results page now exposes enough card-level evidence to do that reliably.",
+  "files": [
+    "internal/cli/search.go",
+    "internal/cli/search_listingajax.go",
+    "internal/cli/search_test.go",
+    "README.md",
+    "SKILL.md",
+    "docs/validated-contract.md"
+  ],
+  "validated_outcome": "The new --exclude-tenanted flag removes listings visibly tagged or described as rented from live results, totals, and shortlist enrichment, with fixture coverage and live smoke verification."
+}

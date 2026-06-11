@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"idealista-pp-cli/internal/client"
@@ -29,11 +33,13 @@ func newCookieCmd(flags *rootFlags) *cobra.Command {
 the Idealista.pt website workflow.
 
   cookie set <value>      saves a cookie string into the local config file
+  cookie setup            prints the guided browser workflow for capturing a cookie
   cookie clear            removes the config-backed cookie
   cookie source           shows where the active cookie comes from
   cookie check            validates the current cookie against the live site`,
 		RunE: parentNoSubcommandRunE(flags),
 	}
+	cmd.AddCommand(newCookieSetupCmd(flags))
 	cmd.AddCommand(newCookieSetCmd(flags))
 	cmd.AddCommand(newCookieClearCmd(flags))
 	cmd.AddCommand(newCookieSourceCmd(flags))
@@ -41,16 +47,93 @@ the Idealista.pt website workflow.
 	return cmd
 }
 
+func newCookieSetupCmd(flags *rootFlags) *cobra.Command {
+	var launch bool
+	cmd := &cobra.Command{
+		Use:   "setup",
+		Short: "Print the browser workflow for obtaining a website session cookie",
+		Example: "  idealista-pp-cli cookie setup\n" +
+			"  idealista-pp-cli cookie setup --launch",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			steps := []string{
+				"Open https://www.idealista.pt and navigate to the results page you want to inspect.",
+				"Open browser DevTools and switch to Network.",
+				"Refresh the page and click a first-party Idealista request.",
+				"Copy the full Cookie request header value.",
+				"Paste it back with: pbpaste | idealista-pp-cli cookie set --stdin",
+				"Validate it with: idealista-pp-cli cookie check",
+			}
+			if dryRunOK(flags) {
+				return printJSONFiltered(cmd.OutOrStdout(), map[string]any{
+					"dry_run": true,
+					"launch":  launch,
+					"steps":   steps,
+				}, flags)
+			}
+			if launch {
+				if err := openCookieSetupURL("https://www.idealista.pt"); err != nil {
+					return err
+				}
+			}
+			if flags.asJSON {
+				return printJSONFiltered(cmd.OutOrStdout(), map[string]any{
+					"launch": launch,
+					"steps":  steps,
+				}, flags)
+			}
+			if launch {
+				fmt.Fprintln(cmd.OutOrStdout(), "Opened https://www.idealista.pt")
+				fmt.Fprintln(cmd.OutOrStdout())
+			}
+			for i, step := range steps {
+				fmt.Fprintf(cmd.OutOrStdout(), "%d. %s\n", i+1, step)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&launch, "launch", false, "Open Idealista.pt in the default browser before printing the setup steps")
+	return cmd
+}
+
+func openCookieSetupURL(target string) error {
+	var command []string
+	switch runtime.GOOS {
+	case "darwin":
+		command = []string{"open", target}
+	case "linux":
+		command = []string{"xdg-open", target}
+	default:
+		return fmt.Errorf("cookie setup --launch is not supported on %s", runtime.GOOS)
+	}
+	if err := exec.Command(command[0], command[1:]...).Start(); err != nil {
+		return fmt.Errorf("launching browser: %w", err)
+	}
+	return nil
+}
+
 func newCookieSetCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:     "set <cookie>",
-		Short:   "Save a website session cookie to the config file",
-		Args:    cobra.ExactArgs(1),
-		Example: "  idealista-pp-cli cookie set 'datadome=...; other_cookie=...'",
+	var stdin bool
+	cmd := &cobra.Command{
+		Use:   "set <cookie>",
+		Short: "Save a website session cookie to the config file",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if stdin {
+				if len(args) != 0 {
+					return cobra.ExactArgs(0)(cmd, args)
+				}
+				return nil
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
+		Example: "  idealista-pp-cli cookie set 'datadome=...; other_cookie=...'\n  pbpaste | idealista-pp-cli cookie set --stdin",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(flags.configPath)
 			if err != nil {
 				return configErr(err)
+			}
+			cookieValue, err := cookieValueFromInput(cmd, stdin, args)
+			if err != nil {
+				return usageErr(err)
 			}
 			if dryRunOK(flags) {
 				return printJSONFiltered(cmd.OutOrStdout(), map[string]any{
@@ -59,7 +142,7 @@ func newCookieSetCmd(flags *rootFlags) *cobra.Command {
 					"config_path": cfg.Path,
 				}, flags)
 			}
-			if err := cfg.SaveCookie(args[0]); err != nil {
+			if err := cfg.SaveCookie(cookieValue); err != nil {
 				return configErr(fmt.Errorf("saving cookie: %w", err))
 			}
 			if flags.asJSON {
@@ -73,6 +156,26 @@ func newCookieSetCmd(flags *rootFlags) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&stdin, "stdin", false, "Read the cookie value from stdin and strip an optional leading 'Cookie: ' prefix")
+	return cmd
+}
+
+func cookieValueFromInput(cmd *cobra.Command, readStdin bool, args []string) (string, error) {
+	if !readStdin {
+		return strings.TrimSpace(args[0]), nil
+	}
+	body, err := io.ReadAll(cmd.InOrStdin())
+	if err != nil {
+		return "", fmt.Errorf("reading stdin: %w", err)
+	}
+	value := strings.TrimSpace(string(body))
+	value = strings.TrimPrefix(value, "Cookie:")
+	value = strings.TrimPrefix(value, "cookie:")
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("no cookie value provided on stdin")
+	}
+	return value, nil
 }
 
 func newCookieClearCmd(flags *rootFlags) *cobra.Command {

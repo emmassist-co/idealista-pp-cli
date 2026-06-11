@@ -3,11 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -24,23 +25,26 @@ type listingSearchCard struct {
 	Description     string   `json:"description,omitempty"`
 	PrimaryImageURL string   `json:"primary_image_url,omitempty"`
 	Features        []string `json:"features,omitempty"`
+	Tags            []string `json:"tags,omitempty"`
 }
 
-type listingAjaxResultsPayload struct {
+type listingResultsPagePayload struct {
 	URL           string              `json:"url"`
 	Path          string              `json:"path"`
-	Query         map[string]string   `json:"query"`
 	ValidatedSpec searchResultsSpec   `json:"validated_spec"`
+	ResultsTitle  string              `json:"results_title,omitempty"`
+	TotalCount    int                 `json:"total_count,omitempty"`
 	CardCount     int                 `json:"card_count"`
 	Cards         []listingSearchCard `json:"cards,omitempty"`
 	RawBody       string              `json:"raw_body,omitempty"`
 }
 
-type listingAjaxEnrichedPayload struct {
+type listingResultsEnrichedPayload struct {
 	URL            string                  `json:"url"`
 	Path           string                  `json:"path"`
-	Query          map[string]string       `json:"query"`
 	ValidatedSpec  searchResultsSpec       `json:"validated_spec"`
+	ResultsTitle   string                  `json:"results_title,omitempty"`
+	TotalCount     int                     `json:"total_count,omitempty"`
 	ParsedCount    int                     `json:"parsed_count"`
 	ShortlistLimit int                     `json:"shortlist_limit"`
 	SelectedIDs    []string                `json:"selected_ids,omitempty"`
@@ -54,6 +58,11 @@ var listingPricePattern = regexp.MustCompile(`\b[\d\.\s]+€`)
 var spacePattern = regexp.MustCompile(`\s+`)
 var tagPattern = regexp.MustCompile(`<[^>]+>`)
 
+type listingResultsPageSummary struct {
+	ResultsTitle string
+	TotalCount   int
+}
+
 func websiteListingAjaxHeaders(referer string) map[string]string {
 	return map[string]string{
 		"Accept":           "application/json, text/javascript, */*; q=0.01",
@@ -61,6 +70,16 @@ func websiteListingAjaxHeaders(referer string) map[string]string {
 		"Sec-Fetch-Mode":   "cors",
 		"Sec-Fetch-Site":   "same-origin",
 		"X-Requested-With": "XMLHttpRequest",
+	}
+}
+
+func websiteResultsPageHeaders() map[string]string {
+	return map[string]string{
+		"Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+		"Sec-Fetch-Dest":            "document",
+		"Sec-Fetch-Mode":            "navigate",
+		"Sec-Fetch-Site":            "same-origin",
+		"Upgrade-Insecure-Requests": "1",
 	}
 }
 
@@ -75,13 +94,26 @@ func fetchListingAjax(ctx context.Context, c *client.Client, path string, query 
 	return data, nil
 }
 
-func summarizeListingAjaxResults(url, path string, query map[string]string, spec searchResultsSpec, body []byte, includeRaw bool) listingAjaxResultsPayload {
+func fetchListingResultsPage(ctx context.Context, c *client.Client, path string) ([]byte, error) {
+	data, err := c.GetWithHeaders(ctx, path, nil, websiteResultsPageHeaders())
+	if err != nil {
+		return nil, err
+	}
+	if vendor := looksLikeDoctorInterstitial(data); vendor != "" {
+		return nil, authErr(fmt.Errorf("%s interstitial rejected the listing results page", vendor))
+	}
+	return data, nil
+}
+
+func summarizeListingResultsPage(url, path string, spec searchResultsSpec, body []byte, includeRaw bool) listingResultsPagePayload {
 	cards := parseListingCards(body)
-	payload := listingAjaxResultsPayload{
+	page := summarizeListingResultsPageBody(body)
+	payload := listingResultsPagePayload{
 		URL:           url,
 		Path:          path,
-		Query:         query,
 		ValidatedSpec: spec,
+		ResultsTitle:  page.ResultsTitle,
+		TotalCount:    page.TotalCount,
 		CardCount:     len(cards),
 		Cards:         cards,
 	}
@@ -91,18 +123,14 @@ func summarizeListingAjaxResults(url, path string, query map[string]string, spec
 	return payload
 }
 
-func summarizeListingAjaxTotals(url, path string, query map[string]string, spec searchResultsSpec, body []byte, includeRaw bool) map[string]any {
+func summarizeListingResultsTotals(url, path string, spec searchResultsSpec, body []byte, includeRaw bool) map[string]any {
+	page := summarizeListingResultsPageBody(body)
 	payload := map[string]any{
 		"url":            url,
 		"path":           path,
-		"query":          query,
 		"validated_spec": spec,
-	}
-	var parsed any
-	if json.Unmarshal(body, &parsed) == nil {
-		payload["totals"] = parsed
-	} else {
-		payload["body"] = string(body)
+		"results_title":  page.ResultsTitle,
+		"total_count":    page.TotalCount,
 	}
 	if includeRaw {
 		payload["raw_body"] = string(body)
@@ -118,6 +146,40 @@ func parseListingCards(body []byte) []listingSearchCard {
 		return cards
 	}
 	return parseListingCardsFallback(body)
+}
+
+func summarizeListingResultsPageBody(body []byte) listingResultsPageSummary {
+	if len(body) == 0 {
+		return listingResultsPageSummary{}
+	}
+	doc, err := html.Parse(bytes.NewReader(body))
+	if err != nil {
+		return summarizeListingResultsPageFallback(body)
+	}
+	title := firstNonEmpty(
+		textByID(doc, "h1-container__text"),
+		textByID(doc, "h1-container"),
+		firstTagText(doc, "h1"),
+	)
+	if title == "" {
+		return summarizeListingResultsPageFallback(body)
+	}
+	return listingResultsPageSummary{
+		ResultsTitle: title,
+		TotalCount:   leadingInteger(title),
+	}
+}
+
+func summarizeListingResultsPageFallback(body []byte) listingResultsPageSummary {
+	text := normalizeSegmentText(string(body))
+	title := firstRegexMatch(text, regexp.MustCompile(`\b[\d\.\s]+\s+casas e apartamentos em [^<]+`))
+	if title == "" {
+		title = firstRegexMatch(text, regexp.MustCompile(`\b[\d\.\s]+\s+im[oó]veis em [^<]+`))
+	}
+	return listingResultsPageSummary{
+		ResultsTitle: title,
+		TotalCount:   leadingInteger(title),
+	}
 }
 
 func parseListingCardsFromHTML(body []byte) []listingSearchCard {
@@ -215,6 +277,7 @@ func buildListingCard(cardRoot, anchor *html.Node, listingID, href string) listi
 		firstImageAttr(cardRoot, "data-ondemand-img"),
 	)
 	card.Features = collectFeatureTexts(cardRoot)
+	card.Tags = collectTextsByClass(cardRoot, "listing-tags")
 	return card
 }
 
@@ -261,6 +324,50 @@ func firstTextByClass(root *html.Node, classNeedle string) string {
 	return out
 }
 
+func textByID(root *html.Node, id string) string {
+	if root == nil {
+		return ""
+	}
+	var out string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if out != "" {
+			return
+		}
+		if n.Type == html.ElementNode && strings.EqualFold(getAttr(n, "id"), id) {
+			out = nodeText(n)
+			return
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(root)
+	return out
+}
+
+func firstTagText(root *html.Node, tag string) string {
+	if root == nil {
+		return ""
+	}
+	var out string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if out != "" {
+			return
+		}
+		if n.Type == html.ElementNode && strings.EqualFold(n.Data, tag) {
+			out = nodeText(n)
+			return
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(root)
+	return out
+}
+
 func collectFeatureTexts(root *html.Node) []string {
 	if root == nil {
 		return nil
@@ -287,6 +394,29 @@ func collectFeatureTexts(root *html.Node) []string {
 	if len(out) > 6 {
 		out = out[:6]
 	}
+	return out
+}
+
+func collectTextsByClass(root *html.Node, classNeedle string) []string {
+	if root == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && classContains(n, classNeedle) {
+			text := nodeText(n)
+			if text != "" && !seen[text] {
+				seen[text] = true
+				out = append(out, text)
+			}
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(root)
 	return out
 }
 
@@ -423,6 +553,80 @@ func selectedListingIDs(cards []listingSearchCard) []string {
 		}
 	}
 	return ids
+}
+
+func excludeTenantedCards(cards []listingSearchCard) []listingSearchCard {
+	filtered := make([]listingSearchCard, 0, len(cards))
+	for _, card := range cards {
+		if cardLooksTenanted(card) {
+			continue
+		}
+		filtered = append(filtered, card)
+	}
+	return filtered
+}
+
+func cardLooksTenanted(card listingSearchCard) bool {
+	for _, tag := range card.Tags {
+		if strings.Contains(strings.ToLower(tag), "arrendad") {
+			return true
+		}
+	}
+	text := strings.ToLower(strings.Join([]string{card.Title, card.Description}, " "))
+	needles := []string{
+		"arrendado",
+		"arrendada",
+		"renda vital",
+		"renda protegida",
+		"vendido com inquilino",
+		"com inquilino",
+		"contrato de arrendamento",
+		"atualmente arrendado",
+		"atualmente arrendada",
+		"rendimento garantido",
+	}
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func leadingInteger(raw string) int {
+	fields := strings.Fields(strings.TrimSpace(raw))
+	if len(fields) == 0 {
+		return 0
+	}
+	normalized := strings.ReplaceAll(fields[0], ".", "")
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	value, err := strconv.Atoi(normalized)
+	if err != nil {
+		return 0
+	}
+	return value
+}
+
+func isHTTPResultsPage(path string) bool {
+	trimmed := strings.TrimSpace(path)
+	return strings.HasPrefix(trimmed, "/comprar-") || strings.HasPrefix(trimmed, "/arrendar-")
+}
+
+func validateResultsPagePath(path string) error {
+	if !isHTTPResultsPage(path) {
+		return fmt.Errorf("expected a website results page path, got %q", path)
+	}
+	return nil
+}
+
+func classifyResultsPageError(err error, target string, flags *rootFlags) error {
+	var apiErr *client.APIError
+	if As(err, &apiErr) {
+		if apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden {
+			return authErr(fmt.Errorf("website session cookie refresh required to validate %s", target))
+		}
+	}
+	return classifySearchValidationError(err, target, flags)
 }
 
 func minInt(a, b int) int {

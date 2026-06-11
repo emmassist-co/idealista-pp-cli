@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "id": "cookie-setup-guided-flow",
+  "applied_at": "2026-06-11",
+  "base_run_id": "unknown",
+  "base_printing_press_version": "unknown",
+  "summary": "Restore a first-class cookie setup command with guided DevTools capture steps and optional browser launch.",
+  "reason": "The agent-facing capability index already advertised `cookie setup`, and operators need a built-in path to capture a fresh website session cookie before live search or detail reads.",
+  "files": [
+    "internal/cli/cookie.go",
+    "internal/cli/cookie_test.go",
+    "README.md",
+    "internal/cli/which.go"
+  ],
+  "validated_outcome": "The CLI now exposes `cookie setup`, returns compact machine-readable steps in JSON mode, and keeps `--launch` previewable through dry-run."
+}

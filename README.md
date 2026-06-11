@@ -53,9 +53,9 @@ Run `idealista-pp-cli --help` for the full command reference and flag list.
 - **`idealista-pp-cli search locations <query>`** - website location suggestions for queries like `lisboa` or `porto`
 - **`idealista-pp-cli search saved`** - compact session-backed saved-search summary
 - **`idealista-pp-cli search results-url ...`** - build validated website result URLs and georeach query state from the current supported filter subset
-- **`idealista-pp-cli search results-live ...`** - call the HAR-validated internal results endpoint with the supported filter subset
+- **`idealista-pp-cli search results-live ...`** - fetch the canonical website results page and parse structured listing cards from the current HTML
 - **`idealista-pp-cli search results-enriched ...`** - fetch result cards first, then enrich a bounded shortlist through listing detail endpoints
-- **`idealista-pp-cli search totals-live ...`** - call the HAR-validated internal totals endpoint with the supported filter subset
+- **`idealista-pp-cli search totals-live ...`** - fetch the canonical website results page and extract the live result count
 - **`idealista-pp-cli listing inspect <listing_id>`** - shaped listing summary across detail, configuration, gallery, and contact endpoints
 - **`idealista-pp-cli listing photos <listing_id>`** - shaped listing photo and gallery summary for a listing ID
 
@@ -82,6 +82,8 @@ idealista-pp-cli listing photos 34998327 --json --select listing_id,primary_imag
 idealista-pp-cli search results-url --location-path comprar-casas/lisboa/arroios --bedrooms t2,t3 --dry-run
 idealista-pp-cli search results-live --location-path comprar-casas/lisboa/arroios --max-price 300000 --dry-run
 idealista-pp-cli search results-enriched --location-path comprar-casas/lisboa/arroios --max-price 300000 --shortlist-limit 3 --dry-run
+idealista-pp-cli search results-live --location-path comprar-casas/lisboa/arroios --max-price 300000 --exclude-tenanted --agent
+idealista-pp-cli search results-enriched --location-path comprar-casas/lisboa/arroios --max-price 300000 --bedrooms t2,t3 --exclude-tenanted --shortlist-limit 3 --agent
 
 # Agent mode — JSON + compact + no prompts in one flag
 idealista-pp-cli search saved --agent
@@ -170,6 +172,8 @@ Supported now:
   - `--energy-class alta,media,baixa`
   - `--published-within 48h,week,month`
   - `--sort preco_medio-asc,precos-asc,atualizado-desc`
+- `search results-live`, `search totals-live`, and `search results-enriched` for the canonical website results page HTML
+  - `--exclude-tenanted` drops listings visibly tagged or described as rented / tenant-occupied
 - `listing photos <listing_id>` for image URLs, primary photo, and gallery metadata
 
 Current boundary:
@@ -200,6 +204,7 @@ idealista-pp-cli search results-url \
   --sort atualizado-desc
 
 idealista-pp-cli listing photos 34998327 --json --select listing_id,primary_image_url,image_count,images
+idealista-pp-cli search results-live --location-path comprar-casas/lisboa/arroios --max-price 300000 --bedrooms t2,t3 --exclude-tenanted --agent
 ```
 
 Live dogfood path:
