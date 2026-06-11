@@ -28,8 +28,8 @@ func newSearchCmd(flags *rootFlags) *cobra.Command {
      and validated result URL composition
 
 There is no supported generic live website search API. The public-site search
-flow is path-shaped and session-backed, so live use must go through the
-explicit subcommands instead of a free-text API query.`,
+flow is path-shaped and session-backed, so live use goes through the explicit
+subcommands instead of a free-text API query.`,
 		Example: `  # Local FTS only
   idealista-pp-cli search "lisboa" --data-source local
   idealista-pp-cli search local "lisboa"
@@ -38,6 +38,8 @@ explicit subcommands instead of a free-text API query.`,
   idealista-pp-cli search locations lisboa
   idealista-pp-cli search saved
   idealista-pp-cli search results-url --location-path comprar-casas/lisboa/arroios --min-price 220000 --max-price 750000 --min-size 60 --max-size 120 --bedrooms t2,t3 --bathrooms 2,3 --amenities elevador,garagem
+  idealista-pp-cli search results-live --location-path comprar-casas/lisboa/arroios --max-price 300000 --bedrooms t1,t2,t3 --published-within month --sort precos-asc
+  idealista-pp-cli search totals-live --location-path comprar-casas/lisboa/arroios --max-price 300000
   idealista-pp-cli listing photos 34998327`,
 		Annotations: map[string]string{"mcp:hidden": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -89,6 +91,9 @@ explicit subcommands instead of a free-text API query.`,
 	cmd.AddCommand(locationsCmd)
 	cmd.AddCommand(savedCmd)
 	cmd.AddCommand(newSearchResultsURLCmd(flags))
+	cmd.AddCommand(newSearchResultsLiveCmd(flags))
+	cmd.AddCommand(newSearchTotalsLiveCmd(flags))
+	cmd.AddCommand(newSearchResultsEnrichedCmd(flags))
 	return cmd
 }
 
@@ -274,6 +279,172 @@ func outputWebsiteSearchPayload(cmd *cobra.Command, flags *rootFlags, payload an
 	}
 	printProvenance(cmd, 1, prov)
 	return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
+}
+
+func newSearchResultsLiveCmd(flags *rootFlags) *cobra.Command {
+	return newSearchListingAjaxCmd(flags, "results-live", false)
+}
+
+func newSearchTotalsLiveCmd(flags *rootFlags) *cobra.Command {
+	return newSearchListingAjaxCmd(flags, "totals-live", true)
+}
+
+func newSearchListingAjaxCmd(flags *rootFlags, use string, totals bool) *cobra.Command {
+	var spec searchResultsSpec
+	var includeRaw bool
+
+	short := "Fetch the HAR-validated listing results endpoint"
+	if totals {
+		short = "Fetch the HAR-validated listing totals endpoint"
+	}
+	cmd := &cobra.Command{
+		Use:   use,
+		Short: short,
+		Long: `Call the website's internal listing AJAX endpoints using the same validated
+filter grammar as 'search results-url'. These endpoints were observed in the
+Idealista HAR captures and remain session-backed, so a usable website cookie is
+still required for live reads.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			derived, err := buildSearchResultsState(spec, currentBaseURL(flags))
+			if err != nil {
+				return usageErr(err)
+			}
+			path := derived.ListingAjaxPath
+			query := derived.ListingAjaxQuery
+			url := derived.ListingAjaxURL
+			if totals {
+				path = derived.TotalsAjaxPath
+				query = derived.TotalsAjaxQuery
+				url = derived.TotalsAjaxURL
+			}
+			payload := map[string]any{
+				"url":            url,
+				"path":           path,
+				"query":          query,
+				"validated_spec": spec,
+			}
+			if dryRunOK(flags) {
+				payload["dry_run"] = true
+				return printJSONFiltered(cmd.OutOrStdout(), payload, flags)
+			}
+			c, err := flags.newClient()
+			if err != nil {
+				return err
+			}
+			referer := strings.TrimRight(currentBaseURL(flags), "/") + derived.RelativeURL
+			data, err := fetchListingAjax(cmd.Context(), c, path, query, referer)
+			if err != nil {
+				return classifySearchValidationError(err, url, flags)
+			}
+			if totals {
+				return outputWebsiteSearchPayload(cmd, flags, summarizeListingAjaxTotals(url, path, query, spec, data, includeRaw), DataProvenance{Source: "live"})
+			}
+			payloadResults := summarizeListingAjaxResults(url, path, query, spec, data, includeRaw)
+			payloadResults.Query = query
+			return outputWebsiteSearchPayload(cmd, flags, payloadResults, DataProvenance{Source: "live"})
+		},
+	}
+	cmd.Flags().StringVar(&spec.LocationPath, "location-path", "", "Required location path like comprar-casas/lisboa/arroios")
+	cmd.Flags().IntVar(&spec.MinPrice, "min-price", 0, "Validated minimum price filter")
+	cmd.Flags().IntVar(&spec.MaxPrice, "max-price", 0, "Validated maximum price filter")
+	cmd.Flags().IntVar(&spec.MinSize, "min-size", 0, "Validated minimum area filter")
+	cmd.Flags().IntVar(&spec.MaxSize, "max-size", 0, "Validated maximum area filter")
+	cmd.Flags().StringSliceVar(&spec.Bedrooms, "bedrooms", nil, "Validated room bands (t0,t1,t2,t3,t4-t5)")
+	cmd.Flags().IntSliceVar(&spec.Bathrooms, "bathrooms", nil, "Validated bathroom counts (1,2,3)")
+	cmd.Flags().StringSliceVar(&spec.Amenities, "amenities", nil, "Validated amenity filters (elevador,garagem,arrecadacao,arcondicionado,roupeiros-embutidos,vista-mar)")
+	cmd.Flags().StringVar(&spec.EnergyClass, "energy-class", "", "Validated energy class (alta,media,baixa)")
+	cmd.Flags().StringVar(&spec.PublishedWithin, "published-within", "", "Validated recency window (48h,week,month)")
+	cmd.Flags().StringVar(&spec.Sort, "sort", "", "Validated sort order (preco_medio-asc, precos-asc, atualizado-desc)")
+	cmd.Flags().BoolVar(&includeRaw, "raw-body", false, "Include the raw AJAX response body for debugging")
+	_ = cmd.MarkFlagRequired("location-path")
+	return cmd
+}
+
+func newSearchResultsEnrichedCmd(flags *rootFlags) *cobra.Command {
+	var spec searchResultsSpec
+	var shortlistLimit int
+
+	cmd := &cobra.Command{
+		Use:   "results-enriched",
+		Short: "Fetch result cards first, then enrich a bounded shortlist of listings",
+		Long: `Call the HAR-validated listing results endpoint, parse listing cards, and
+enrich only a bounded shortlist through the existing listing detail endpoints.
+This stays website-native and conservative by default instead of fan-out over
+every result on the page.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			derived, err := buildSearchResultsState(spec, currentBaseURL(flags))
+			if err != nil {
+				return usageErr(err)
+			}
+			payload := map[string]any{
+				"url":             derived.ListingAjaxURL,
+				"path":            derived.ListingAjaxPath,
+				"query":           derived.ListingAjaxQuery,
+				"validated_spec":  spec,
+				"shortlist_limit": shortlistLimit,
+			}
+			if dryRunOK(flags) {
+				payload["dry_run"] = true
+				return printJSONFiltered(cmd.OutOrStdout(), payload, flags)
+			}
+			c, err := flags.newClient()
+			if err != nil {
+				return err
+			}
+			referer := strings.TrimRight(currentBaseURL(flags), "/") + derived.RelativeURL
+			data, err := fetchListingAjax(cmd.Context(), c, derived.ListingAjaxPath, derived.ListingAjaxQuery, referer)
+			if err != nil {
+				return classifySearchValidationError(err, derived.ListingAjaxURL, flags)
+			}
+			cards := parseListingCards(data)
+			selectedCards := shortlistCards(cards, shortlistLimit)
+			enriched := make([]listingInspectSummary, 0, len(selectedCards))
+			partialErrors := make([]string, 0)
+			for _, card := range selectedCards {
+				summary, inspectErr := inspectListing(cmd.Context(), c, flags, card.ListingID, "", false)
+				if inspectErr != nil {
+					partialErrors = append(partialErrors, fmt.Sprintf("%s: %v", card.ListingID, inspectErr))
+					continue
+				}
+				if summary.Title == "" {
+					summary.Title = card.Title
+				}
+				if summary.Address == "" {
+					summary.Address = card.Address
+				}
+				if summary.PrimaryImageURL == "" {
+					summary.PrimaryImageURL = card.PrimaryImageURL
+				}
+				enriched = append(enriched, summary)
+			}
+			return outputWebsiteSearchPayload(cmd, flags, listingAjaxEnrichedPayload{
+				URL:            derived.ListingAjaxURL,
+				Path:           derived.ListingAjaxPath,
+				Query:          derived.ListingAjaxQuery,
+				ValidatedSpec:  spec,
+				ParsedCount:    len(cards),
+				ShortlistLimit: shortlistLimit,
+				SelectedIDs:    selectedListingIDs(selectedCards),
+				Cards:          cards,
+				Listings:       enriched,
+				PartialErrors:  partialErrors,
+			}, DataProvenance{Source: "live"})
+		},
+	}
+	cmd.Flags().StringVar(&spec.LocationPath, "location-path", "", "Required location path like comprar-casas/lisboa/arroios")
+	cmd.Flags().IntVar(&spec.MinPrice, "min-price", 0, "Validated minimum price filter")
+	cmd.Flags().IntVar(&spec.MaxPrice, "max-price", 0, "Validated maximum price filter")
+	cmd.Flags().IntVar(&spec.MinSize, "min-size", 0, "Validated minimum area filter")
+	cmd.Flags().IntVar(&spec.MaxSize, "max-size", 0, "Validated maximum area filter")
+	cmd.Flags().StringSliceVar(&spec.Bedrooms, "bedrooms", nil, "Validated room bands (t0,t1,t2,t3,t4-t5)")
+	cmd.Flags().IntSliceVar(&spec.Bathrooms, "bathrooms", nil, "Validated bathroom counts (1,2,3)")
+	cmd.Flags().StringSliceVar(&spec.Amenities, "amenities", nil, "Validated amenity filters (elevador,garagem,arrecadacao,arcondicionado,roupeiros-embutidos,vista-mar)")
+	cmd.Flags().StringVar(&spec.EnergyClass, "energy-class", "", "Validated energy class (alta,media,baixa)")
+	cmd.Flags().StringVar(&spec.PublishedWithin, "published-within", "", "Validated recency window (48h,week,month)")
+	cmd.Flags().StringVar(&spec.Sort, "sort", "", "Validated sort order (preco_medio-asc, precos-asc, atualizado-desc)")
+	cmd.Flags().IntVar(&shortlistLimit, "shortlist-limit", 3, "Maximum number of parsed listings to enrich")
+	_ = cmd.MarkFlagRequired("location-path")
+	return cmd
 }
 
 // isNilOrEmpty checks whether a JSON object has nil or empty values for

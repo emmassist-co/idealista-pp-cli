@@ -41,6 +41,7 @@ operator-friendly read-only workflows.`,
 		RunE: parentNoSubcommandRunE(flags),
 	}
 	cmd.AddCommand(newListingPhotosCmd(flags))
+	cmd.AddCommand(newListingInspectCmd(flags))
 	return cmd
 }
 

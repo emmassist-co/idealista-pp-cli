@@ -72,6 +72,10 @@ This CLI uses Chrome-compatible HTTP transport over HTTP/3 for browser-facing en
 - `idealista-pp-cli search locations <query>` — Website location suggestions
 - `idealista-pp-cli search saved` — Compact saved-search/session summary
 - `idealista-pp-cli search results-url ...` — Build validated result URLs and georeach query state from the supported website filter subset
+- `idealista-pp-cli search results-live ...` — Call the internal listing results endpoint observed in the HAR with the supported filter subset
+- `idealista-pp-cli search results-enriched ...` — Parse result cards first, then enrich a bounded shortlist through the listing detail endpoints
+- `idealista-pp-cli search totals-live ...` — Call the internal listing totals endpoint observed in the HAR with the supported filter subset
+- `idealista-pp-cli listing inspect <listing_id>` — Get a shaped listing summary across detail, configuration, gallery, and contact endpoints
 - `idealista-pp-cli listing photos <listing_id>` — Get listing photos, primary image, and gallery metadata
 
 
@@ -90,6 +94,10 @@ For website search work, prefer these explicit flows over a generic `search <que
 - `search locations <query>` for place autocomplete
 - `search saved` for current-session saved-search context
 - `search results-url` for supported result-page filters
+- `search results-live` for the internal results HTML endpoint
+- `search results-enriched` for shortlist-first structured listing search
+- `search totals-live` for the internal totals endpoint
+- `listing inspect <listing_id>` for the aggregated listing detail workflow
 - `listing photos <listing_id>` for listing image and gallery inspection
 
 Validated `search results-url` filter subset:
@@ -106,6 +114,7 @@ Validated `search results-url` filter subset:
 Current boundary:
 
 - result URLs and georeach validation are related but not identical: the browse URL now follows the observed Arroios token grammar, while georeach covers the numeric and room-based subset the website exposes through AJAX
+- the listing results and totals endpoints are now exposed directly, but they still depend on a usable website cookie and may return DataDome challenge HTML when the session is blocked
 - listing photos returns metadata and image URLs only; it does not download assets locally
 
 ## Auth Setup

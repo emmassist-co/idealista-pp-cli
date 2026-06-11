@@ -131,6 +131,117 @@ func TestBuildSearchResultsState_CombinedRangesPopulateGeoReach(t *testing.T) {
 	if got.GeoReachQuery["roomsTwo"] != "true" || got.GeoReachQuery["roomsFourOrMore"] != "true" {
 		t.Fatalf("georeach room query = %#v", got.GeoReachQuery)
 	}
+	if got.ListingAjaxPath != "/ajax/listingcontroller/listingajax.ajax" {
+		t.Fatalf("ListingAjaxPath = %q", got.ListingAjaxPath)
+	}
+	if got.TotalsAjaxPath != "/ajax/listingcontroller/totals/listingajax.ajax" {
+		t.Fatalf("TotalsAjaxPath = %q", got.TotalsAjaxPath)
+	}
+	if got.ListingAjaxQuery["locationUri"] != "lisboa/arroios" {
+		t.Fatalf("locationUri = %q", got.ListingAjaxQuery["locationUri"])
+	}
+	if got.ListingAjaxQuery["adfilter_pricemin"] != "220000" || got.ListingAjaxQuery["adfilter_price"] != "750000" {
+		t.Fatalf("listingajax price query = %#v", got.ListingAjaxQuery)
+	}
+	if got.ListingAjaxQuery["adfilter_area"] != "60" || got.ListingAjaxQuery["adfilter_areamax"] != "120" {
+		t.Fatalf("listingajax area query = %#v", got.ListingAjaxQuery)
+	}
+	if got.ListingAjaxQuery["adfilter_rooms_2"] != "2" || got.ListingAjaxQuery["adfilter_rooms_4_more"] != "4" {
+		t.Fatalf("listingajax room query = %#v", got.ListingAjaxQuery)
+	}
+}
+
+func TestBuildSearchResultsState_ListingAjaxMapsFilters(t *testing.T) {
+	got, err := buildSearchResultsState(searchResultsSpec{
+		LocationPath:    "comprar-casas/lisboa/arroios",
+		MaxPrice:        300000,
+		Bedrooms:        []string{"t1", "t2", "t3"},
+		Bathrooms:       []int{1, 2},
+		Amenities:       []string{"elevador", "garagem", "arrecadacao", "arcondicionado", "roupeiros-embutidos", "vista-mar"},
+		EnergyClass:     "alta",
+		PublishedWithin: "month",
+		Sort:            "precos-asc",
+	}, "https://www.idealista.pt")
+	if err != nil {
+		t.Fatalf("buildSearchResultsState: %v", err)
+	}
+	if got.ListingAjaxQuery["adfilter_price"] != "300000" {
+		t.Fatalf("adfilter_price = %q", got.ListingAjaxQuery["adfilter_price"])
+	}
+	if got.ListingAjaxQuery["adfilter_rooms_1"] != "1" || got.ListingAjaxQuery["adfilter_rooms_2"] != "2" || got.ListingAjaxQuery["adfilter_rooms_3"] != "3" {
+		t.Fatalf("listingajax rooms = %#v", got.ListingAjaxQuery)
+	}
+	if got.ListingAjaxQuery["adfilter_baths_1"] != "1" || got.ListingAjaxQuery["adfilter_baths_2"] != "2" {
+		t.Fatalf("listingajax baths = %#v", got.ListingAjaxQuery)
+	}
+	if got.ListingAjaxQuery["adfilter_lift"] != "1" ||
+		got.ListingAjaxQuery["adfilter_parkingspace"] != "1" ||
+		got.ListingAjaxQuery["adfilter_boxroom"] != "1" ||
+		got.ListingAjaxQuery["adfilter_hasairconditioning"] != "1" ||
+		got.ListingAjaxQuery["adfilter_wardrobes"] != "1" ||
+		got.ListingAjaxQuery["adfilter_seaviews"] != "1" {
+		t.Fatalf("listingajax amenities = %#v", got.ListingAjaxQuery)
+	}
+	if got.ListingAjaxQuery["adfilter_energyCertificateHigh"] != "1" {
+		t.Fatalf("energy mapping = %#v", got.ListingAjaxQuery)
+	}
+	if got.ListingAjaxQuery["adfilter_published"] != "3" {
+		t.Fatalf("published mapping = %#v", got.ListingAjaxQuery)
+	}
+	if got.ListingAjaxQuery["ordem"] != "precos-asc" {
+		t.Fatalf("ordem = %q", got.ListingAjaxQuery["ordem"])
+	}
+	if got.TotalsAjaxQuery["adfilter_price"] != "300000" {
+		t.Fatalf("totals query mismatch = %#v", got.TotalsAjaxQuery)
+	}
+}
+
+func TestParseListingCards(t *testing.T) {
+	body := []byte(`
+<article class="item">
+  <a class="item-link" href="/imovel/11111111/" title="Apartamento T2 em Arroios">Apartamento T2 em Arroios</a>
+  <span class="item-price h2-simulated">295.000 €</span>
+  <span class="item-price-down">T2 67 m²</span>
+  <span class="item-detail-location">Rua do Forno do Tijolo</span>
+  <p class="item-description">Bom estado, perto do metro.</p>
+  <span class="item-detail">T2</span>
+  <span class="item-detail">67 m²</span>
+  <img src="https://img4.idealista.pt/a.jpg" />
+</article>
+<article class="item">
+  <a class="item-link" href="/imovel/22222222/">Apartamento T3 em Penha de Franca</a>
+  <span class="item-price">300.000 €</span>
+</article>`)
+
+	got := parseListingCards(body)
+	if len(got) != 2 {
+		t.Fatalf("len(parseListingCards) = %d", len(got))
+	}
+	if got[0].ListingID != "11111111" {
+		t.Fatalf("ListingID = %q", got[0].ListingID)
+	}
+	if got[0].Title != "Apartamento T2 em Arroios" {
+		t.Fatalf("Title = %q", got[0].Title)
+	}
+	if got[0].Price != "295.000 €" {
+		t.Fatalf("Price = %q", got[0].Price)
+	}
+	if got[0].PrimaryImageURL != "https://img4.idealista.pt/a.jpg" {
+		t.Fatalf("PrimaryImageURL = %q", got[0].PrimaryImageURL)
+	}
+	if got[1].ListingID != "22222222" {
+		t.Fatalf("second ListingID = %q", got[1].ListingID)
+	}
+}
+
+func TestWhichSearchResultsEnrichedQueryMatches(t *testing.T) {
+	matches := rankWhich(whichIndex, "results-enriched", 3)
+	if len(matches) == 0 {
+		t.Fatalf("expected enriched search match")
+	}
+	if matches[0].Entry.Command != "search results-enriched" {
+		t.Fatalf("top match = %q, want search results-enriched", matches[0].Entry.Command)
+	}
 }
 
 func TestBuildSearchResultsRelativeURL_RejectsInvalidRangeOrder(t *testing.T) {

@@ -59,7 +59,7 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("%s %s returned HTTP %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
 }
 
-func newHTTPClient(timeout time.Duration, jar http.CookieJar) *http.Client {
+func newHTTPClient(timeout time.Duration, jar http.CookieJar) (*http.Client, error) {
 	builder := surf.NewClient().
 		Builder().
 		Impersonate().
@@ -69,7 +69,11 @@ func newHTTPClient(timeout time.Duration, jar http.CookieJar) *http.Client {
 	if jar == nil {
 		builder = builder.Session()
 	}
-	surfClient := builder.Build().Unwrap()
+	surfResult := builder.Build()
+	if surfResult.IsErr() {
+		return nil, surfResult.Err()
+	}
+	surfClient := surfResult.Ok()
 	// Surf's underlying *http.Transport sets ResponseHeaderTimeout to
 	// its package default (10s in surf v1.x), which caps how long we
 	// wait for the FIRST response byte independent of the overall
@@ -91,13 +95,16 @@ func newHTTPClient(timeout time.Duration, jar http.CookieJar) *http.Client {
 	if jar != nil {
 		httpClient.Jar = jar
 	}
-	return httpClient
+	return httpClient, nil
 }
 
-func New(cfg *config.Config, timeout time.Duration, rateLimit float64) *Client {
+func New(cfg *config.Config, timeout time.Duration, rateLimit float64) (*Client, error) {
 	homeDir, _ := os.UserHomeDir()
 	cacheDir := filepath.Join(homeDir, ".cache", "idealista-pp-cli", "http")
-	httpClient := newHTTPClient(timeout, nil)
+	httpClient, err := newHTTPClient(timeout, nil)
+	if err != nil {
+		return nil, err
+	}
 	c := &Client{
 		BaseURL:    strings.TrimRight(cfg.BaseURL, "/"),
 		Config:     cfg,
@@ -137,7 +144,7 @@ func New(cfg *config.Config, timeout time.Duration, rateLimit float64) *Client {
 		}
 		return nil
 	}
-	return c
+	return c, nil
 }
 
 // RateLimit returns the current effective rate limit in req/s. Returns 0 if disabled.
