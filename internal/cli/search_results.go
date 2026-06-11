@@ -68,6 +68,12 @@ type derivedSearchState struct {
 	GeoReachPath      string            `json:"georeach_path"`
 	GeoReachURL       string            `json:"georeach_url"`
 	GeoReachQuery     map[string]string `json:"georeach_query,omitempty"`
+	ListingAjaxPath   string            `json:"listingajax_path,omitempty"`
+	ListingAjaxURL    string            `json:"listingajax_url,omitempty"`
+	ListingAjaxQuery  map[string]string `json:"listingajax_query,omitempty"`
+	TotalsAjaxPath    string            `json:"totalsajax_path,omitempty"`
+	TotalsAjaxURL     string            `json:"totalsajax_url,omitempty"`
+	TotalsAjaxQuery   map[string]string `json:"totalsajax_query,omitempty"`
 	FilterTokens      []string          `json:"filter_tokens,omitempty"`
 	OmittedFromURL    []string          `json:"omitted_from_url,omitempty"`
 	URLFilterCoverage string            `json:"url_filter_coverage,omitempty"`
@@ -78,6 +84,21 @@ type liveCheckResult struct {
 	ResultsURLStatus     string `json:"results_url_status"`
 	GeoReachStatusCode   int    `json:"georeach_status_code"`
 	GeoReachStatus       string `json:"georeach_status"`
+}
+
+type normalizedSearchResultsSpec struct {
+	LocationPath    string
+	LocationURI     string
+	MinPrice        int
+	MaxPrice        int
+	MinSize         int
+	MaxSize         int
+	Bedrooms        []string
+	Bathrooms       []int
+	Amenities       []string
+	EnergyClass     string
+	PublishedWithin string
+	Sort            string
 }
 
 func newSearchResultsURLCmd(flags *rootFlags) *cobra.Command {
@@ -224,69 +245,37 @@ func buildSearchResultsRelativeURL(spec searchResultsSpec) (string, error) {
 }
 
 func buildSearchResultsState(spec searchResultsSpec, baseURL string) (derivedSearchState, error) {
-	locationPath := normalizeLocationPath(spec.LocationPath)
-	if locationPath == "" {
-		return derivedSearchState{}, fmt.Errorf("--location-path is required")
+	normalized, err := normalizeSearchResultsSpec(spec)
+	if err != nil {
+		return derivedSearchState{}, err
 	}
-	if !strings.HasPrefix(locationPath, "comprar-casas/") {
-		return derivedSearchState{}, fmt.Errorf("--location-path must start with comprar-casas/")
+	energyToken, err := canonicalEnergyClass(normalized.EnergyClass)
+	if err != nil {
+		return derivedSearchState{}, err
 	}
-	if spec.MinPrice < 0 || spec.MaxPrice < 0 || spec.MinSize < 0 || spec.MaxSize < 0 {
-		return derivedSearchState{}, fmt.Errorf("numeric bounds must be positive")
-	}
-	if spec.MinPrice > 0 && spec.MaxPrice > 0 && spec.MinPrice > spec.MaxPrice {
-		return derivedSearchState{}, fmt.Errorf("--min-price cannot be greater than --max-price")
-	}
-	if spec.MinSize > 0 && spec.MaxSize > 0 && spec.MinSize > spec.MaxSize {
-		return derivedSearchState{}, fmt.Errorf("--min-size cannot be greater than --max-size")
+	publishedToken, err := canonicalPublishedWindow(normalized.PublishedWithin)
+	if err != nil {
+		return derivedSearchState{}, err
 	}
 
-	bedrooms := canonicalBedrooms(spec.Bedrooms)
-	for _, bedroom := range bedrooms {
-		if !slices.Contains(supportedBedroomBands, bedroom) {
-			return derivedSearchState{}, fmt.Errorf("unsupported bedroom band %q; supported: %s", bedroom, strings.Join(supportedBedroomBands, ", "))
-		}
+	filterTokens := make([]string, 0, 4+len(normalized.Bedrooms)+len(normalized.Bathrooms)+len(normalized.Amenities)+2)
+	if normalized.MaxPrice > 0 {
+		filterTokens = append(filterTokens, "preco-max_"+strconv.Itoa(normalized.MaxPrice))
 	}
-	bathrooms := canonicalBathrooms(spec.Bathrooms)
-	for _, bathroom := range bathrooms {
-		if !slices.Contains(supportedBathroomCounts, bathroom) {
-			return derivedSearchState{}, fmt.Errorf("unsupported bathroom count %d; supported: 1, 2, 3", bathroom)
-		}
+	if normalized.MinPrice > 0 {
+		filterTokens = append(filterTokens, "preco-min_"+strconv.Itoa(normalized.MinPrice))
 	}
-	amenities, err := canonicalAmenities(spec.Amenities)
-	if err != nil {
-		return derivedSearchState{}, err
+	if normalized.MinSize > 0 {
+		filterTokens = append(filterTokens, "tamanho-min_"+strconv.Itoa(normalized.MinSize))
 	}
-	energyToken, err := canonicalEnergyClass(spec.EnergyClass)
-	if err != nil {
-		return derivedSearchState{}, err
+	if normalized.MaxSize > 0 {
+		filterTokens = append(filterTokens, "tamanho-max_"+strconv.Itoa(normalized.MaxSize))
 	}
-	publishedToken, err := canonicalPublishedWindow(spec.PublishedWithin)
-	if err != nil {
-		return derivedSearchState{}, err
-	}
-	if spec.Sort != "" && !slices.Contains(supportedSortOrders, spec.Sort) {
-		return derivedSearchState{}, fmt.Errorf("unsupported sort %q; supported: %s", spec.Sort, strings.Join(supportedSortOrders, ", "))
-	}
-
-	filterTokens := make([]string, 0, 4+len(bedrooms)+len(bathrooms)+len(amenities)+2)
-	if spec.MaxPrice > 0 {
-		filterTokens = append(filterTokens, "preco-max_"+strconv.Itoa(spec.MaxPrice))
-	}
-	if spec.MinPrice > 0 {
-		filterTokens = append(filterTokens, "preco-min_"+strconv.Itoa(spec.MinPrice))
-	}
-	if spec.MinSize > 0 {
-		filterTokens = append(filterTokens, "tamanho-min_"+strconv.Itoa(spec.MinSize))
-	}
-	if spec.MaxSize > 0 {
-		filterTokens = append(filterTokens, "tamanho-max_"+strconv.Itoa(spec.MaxSize))
-	}
-	filterTokens = append(filterTokens, bedrooms...)
-	for _, bathroom := range bathrooms {
+	filterTokens = append(filterTokens, normalized.Bedrooms...)
+	for _, bathroom := range normalized.Bathrooms {
 		filterTokens = append(filterTokens, "banho-"+strconv.Itoa(bathroom))
 	}
-	filterTokens = append(filterTokens, amenities...)
+	filterTokens = append(filterTokens, normalized.Amenities...)
 	if energyToken != "" {
 		filterTokens = append(filterTokens, energyToken)
 	}
@@ -294,7 +283,7 @@ func buildSearchResultsState(spec searchResultsSpec, baseURL string) (derivedSea
 		filterTokens = append(filterTokens, publishedToken)
 	}
 
-	relativePath := "/" + locationPath + "/"
+	relativePath := "/" + normalized.LocationPath + "/"
 	if len(filterTokens) > 0 {
 		relativePath += "com-" + strings.Join(filterTokens, ",") + "/"
 	}
@@ -303,15 +292,21 @@ func buildSearchResultsState(spec searchResultsSpec, baseURL string) (derivedSea
 		u.Path += "/"
 	}
 	query := url.Values{}
-	if spec.Sort != "" {
-		query.Set("ordem", spec.Sort)
+	if normalized.Sort != "" {
+		query.Set("ordem", normalized.Sort)
 	}
 	u.RawQuery = query.Encode()
 
-	geoReachPath, geoReachParams, err := buildGeoReachState(locationPath, spec, bedrooms)
+	geoReachPath, geoReachParams, err := buildGeoReachState(normalized.LocationPath, spec, normalized.Bedrooms)
 	if err != nil {
 		return derivedSearchState{}, err
 	}
+	listingAjaxPath, listingAjaxParams, err := buildListingAjaxState(normalized)
+	if err != nil {
+		return derivedSearchState{}, err
+	}
+	totalsAjaxPath := "/ajax/listingcontroller/totals/listingajax.ajax"
+	totalsAjaxParams := cloneStringMap(listingAjaxParams)
 	geoURL := strings.TrimRight(baseURL, "/") + geoReachPath
 	if len(geoReachParams) > 0 {
 		geoQuery := url.Values{}
@@ -325,12 +320,26 @@ func buildSearchResultsState(spec searchResultsSpec, baseURL string) (derivedSea
 		}
 		geoURL += "?" + geoQuery.Encode()
 	}
+	listingAjaxURL := strings.TrimRight(baseURL, "/") + listingAjaxPath
+	if encoded := encodeSortedQuery(listingAjaxParams); encoded != "" {
+		listingAjaxURL += "?" + encoded
+	}
+	totalsAjaxURL := strings.TrimRight(baseURL, "/") + totalsAjaxPath
+	if encoded := encodeSortedQuery(totalsAjaxParams); encoded != "" {
+		totalsAjaxURL += "?" + encoded
+	}
 
 	return derivedSearchState{
 		RelativeURL:       u.String(),
 		GeoReachPath:      geoReachPath,
 		GeoReachURL:       geoURL,
 		GeoReachQuery:     geoReachParams,
+		ListingAjaxPath:   listingAjaxPath,
+		ListingAjaxURL:    listingAjaxURL,
+		ListingAjaxQuery:  listingAjaxParams,
+		TotalsAjaxPath:    totalsAjaxPath,
+		TotalsAjaxURL:     totalsAjaxURL,
+		TotalsAjaxQuery:   totalsAjaxParams,
 		FilterTokens:      filterTokens,
 		OmittedFromURL:    nil,
 		URLFilterCoverage: "full",
@@ -364,6 +373,206 @@ func buildGeoReachState(locationPath string, spec searchResultsSpec, bedrooms []
 		params[paramName] = "true"
 	}
 	return geoReachPath, params, nil
+}
+
+func normalizeSearchResultsSpec(spec searchResultsSpec) (normalizedSearchResultsSpec, error) {
+	locationPath := normalizeLocationPath(spec.LocationPath)
+	if locationPath == "" {
+		return normalizedSearchResultsSpec{}, fmt.Errorf("--location-path is required")
+	}
+	if !strings.HasPrefix(locationPath, "comprar-casas/") {
+		return normalizedSearchResultsSpec{}, fmt.Errorf("--location-path must start with comprar-casas/")
+	}
+	if spec.MinPrice < 0 || spec.MaxPrice < 0 || spec.MinSize < 0 || spec.MaxSize < 0 {
+		return normalizedSearchResultsSpec{}, fmt.Errorf("numeric bounds must be positive")
+	}
+	if spec.MinPrice > 0 && spec.MaxPrice > 0 && spec.MinPrice > spec.MaxPrice {
+		return normalizedSearchResultsSpec{}, fmt.Errorf("--min-price cannot be greater than --max-price")
+	}
+	if spec.MinSize > 0 && spec.MaxSize > 0 && spec.MinSize > spec.MaxSize {
+		return normalizedSearchResultsSpec{}, fmt.Errorf("--min-size cannot be greater than --max-size")
+	}
+
+	bedrooms := canonicalBedrooms(spec.Bedrooms)
+	for _, bedroom := range bedrooms {
+		if !slices.Contains(supportedBedroomBands, bedroom) {
+			return normalizedSearchResultsSpec{}, fmt.Errorf("unsupported bedroom band %q; supported: %s", bedroom, strings.Join(supportedBedroomBands, ", "))
+		}
+	}
+	bathrooms := canonicalBathrooms(spec.Bathrooms)
+	for _, bathroom := range bathrooms {
+		if !slices.Contains(supportedBathroomCounts, bathroom) {
+			return normalizedSearchResultsSpec{}, fmt.Errorf("unsupported bathroom count %d; supported: 1, 2, 3", bathroom)
+		}
+	}
+	amenities, err := canonicalAmenities(spec.Amenities)
+	if err != nil {
+		return normalizedSearchResultsSpec{}, err
+	}
+	if spec.Sort != "" && !slices.Contains(supportedSortOrders, spec.Sort) {
+		return normalizedSearchResultsSpec{}, fmt.Errorf("unsupported sort %q; supported: %s", spec.Sort, strings.Join(supportedSortOrders, ", "))
+	}
+
+	return normalizedSearchResultsSpec{
+		LocationPath:    locationPath,
+		LocationURI:     strings.TrimPrefix(locationPath, "comprar-casas/"),
+		MinPrice:        spec.MinPrice,
+		MaxPrice:        spec.MaxPrice,
+		MinSize:         spec.MinSize,
+		MaxSize:         spec.MaxSize,
+		Bedrooms:        bedrooms,
+		Bathrooms:       bathrooms,
+		Amenities:       amenities,
+		EnergyClass:     strings.TrimSpace(strings.ToLower(spec.EnergyClass)),
+		PublishedWithin: strings.TrimSpace(strings.ToLower(spec.PublishedWithin)),
+		Sort:            strings.TrimSpace(spec.Sort),
+	}, nil
+}
+
+func buildListingAjaxState(spec normalizedSearchResultsSpec) (string, map[string]string, error) {
+	query := map[string]string{
+		"typology":                              "1",
+		"operation":                             "1",
+		"freeText":                              "",
+		"locationUri":                           spec.LocationURI,
+		"adfilter_pricemin":                     "default",
+		"adfilter_price":                        "default",
+		"adfilter_area":                         "default",
+		"adfilter_areamax":                      "default",
+		"adfilter_tenanted":                     "",
+		"adfilter_free":                         "",
+		"adfilter_rooms_0":                      "",
+		"adfilter_rooms_1":                      "",
+		"adfilter_rooms_2":                      "",
+		"adfilter_rooms_3":                      "",
+		"adfilter_rooms_4_more":                 "",
+		"adfilter_baths_1":                      "",
+		"adfilter_baths_2":                      "",
+		"adfilter_baths_3":                      "",
+		"adfilter_newconstruction":              "",
+		"adfilter_goodcondition":                "",
+		"adfilter_toberestored":                 "",
+		"adfilter_hasairconditioning":           "",
+		"adfilter_wardrobes":                    "",
+		"adfilter_lift":                         "",
+		"adfilter_parkingspace":                 "",
+		"adfilter_garden":                       "",
+		"adfilter_swimmingpool":                 "",
+		"adfilter_boxroom":                      "",
+		"adfilter_accessibleHousing":            "",
+		"adfilter_luxury":                       "",
+		"adfilter_seaviews":                     "",
+		"adfilter_top_floor":                    "",
+		"adfilter_intermediate_floor":           "",
+		"adfilter_ground_floor":                 "",
+		"adfilter_energyCertificateHigh":        "",
+		"adfilter_energyCertificateMedium":      "",
+		"adfilter_energyCertificateLow":         "",
+		"adfilter_hasplan":                      "",
+		"adfilter_digitalvisit":                 "",
+		"adfilter_agencyisabank":                "",
+		"adfilter_published":                    "default",
+		"ordem":                                 "",
+		"adfilter_onlyflats":                    "",
+		"adfilter_penthouse":                    "",
+		"adfilter_duplex":                       "",
+		"adfilter_homes":                        "",
+		"adfilter_independent":                  "",
+		"adfilter_semidetached":                 "",
+		"adfilter_terraced":                     "",
+		"adfilter_countryhouses":                "",
+		"adfilter_chalets":                      "",
+		"adfilter_balcony":                      "",
+		"adfilter_hasterrace":                   "",
+		"adfilter_exterior_domestic_space_type": "",
+		"device":                                "desktop",
+	}
+	if spec.MinPrice > 0 {
+		query["adfilter_pricemin"] = strconv.Itoa(spec.MinPrice)
+	}
+	if spec.MaxPrice > 0 {
+		query["adfilter_price"] = strconv.Itoa(spec.MaxPrice)
+	}
+	if spec.MinSize > 0 {
+		query["adfilter_area"] = strconv.Itoa(spec.MinSize)
+	}
+	if spec.MaxSize > 0 {
+		query["adfilter_areamax"] = strconv.Itoa(spec.MaxSize)
+	}
+	for _, bedroom := range spec.Bedrooms {
+		switch bedroom {
+		case "t0":
+			query["adfilter_rooms_0"] = "0"
+		case "t1":
+			query["adfilter_rooms_1"] = "1"
+		case "t2":
+			query["adfilter_rooms_2"] = "2"
+		case "t3":
+			query["adfilter_rooms_3"] = "3"
+		case "t4-t5":
+			query["adfilter_rooms_4_more"] = "4"
+		}
+	}
+	for _, bathroom := range spec.Bathrooms {
+		query["adfilter_baths_"+strconv.Itoa(bathroom)] = strconv.Itoa(bathroom)
+	}
+	for _, amenity := range spec.Amenities {
+		switch amenity {
+		case "elevador":
+			query["adfilter_lift"] = "1"
+		case "garagem":
+			query["adfilter_parkingspace"] = "1"
+		case "arrecadacao":
+			query["adfilter_boxroom"] = "1"
+		case "arcondicionado":
+			query["adfilter_hasairconditioning"] = "1"
+		case "roupeiros-embutidos":
+			query["adfilter_wardrobes"] = "1"
+		case "vista-mar":
+			query["adfilter_seaviews"] = "1"
+		}
+	}
+	switch spec.EnergyClass {
+	case "alta":
+		query["adfilter_energyCertificateHigh"] = "1"
+	case "media":
+		query["adfilter_energyCertificateMedium"] = "1"
+	case "baixa":
+		query["adfilter_energyCertificateLow"] = "1"
+	}
+	switch spec.PublishedWithin {
+	case "48h":
+		query["adfilter_published"] = "1"
+	case "week":
+		query["adfilter_published"] = "2"
+	case "month":
+		query["adfilter_published"] = "3"
+	}
+	if spec.Sort != "" {
+		query["ordem"] = spec.Sort
+	}
+	return "/ajax/listingcontroller/listingajax.ajax", query, nil
+}
+
+func encodeSortedQuery(params map[string]string) string {
+	query := url.Values{}
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		query.Set(key, params[key])
+	}
+	return query.Encode()
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func canonicalBedrooms(raw []string) []string {

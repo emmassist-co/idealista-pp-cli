@@ -261,7 +261,10 @@ func (f *rootFlags) newClient() (*client.Client, error) {
 	if err != nil {
 		return nil, configErr(err)
 	}
-	c := client.New(cfg, f.timeout, f.rateLimit)
+	c, err := client.New(cfg, f.timeout, f.rateLimit)
+	if err != nil {
+		return nil, configErr(err)
+	}
 	c.DryRun = f.dryRun
 	c.NoCache = f.noCache
 	return c, nil

@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "id": "results-page-html-search-live",
+  "applied_at": "2026-06-11",
+  "base_run_id": "unknown",
+  "base_printing_press_version": "unknown",
+  "summary": "Switch live search and totals commands from the stale listingajax endpoints to the canonical website results page HTML.",
+  "reason": "Fresh browser HARs showed the live Arroios results flow no longer calls listingajax.ajax, while the page HTML still contains the current listing cards and result count needed for API-first website-native search.",
+  "files": [
+    "internal/cli/search.go",
+    "internal/cli/search_listingajax.go",
+    "internal/cli/search_test.go",
+    "internal/cli/which.go",
+    "README.md",
+    "SKILL.md",
+    "docs/validated-contract.md"
+  ],
+  "validated_outcome": "Internal CLI, client, and MCP tests pass; live search now targets the current results page path but still requires a fresh accepted website session cookie."
+}

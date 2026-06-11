@@ -28,8 +28,8 @@ func newSearchCmd(flags *rootFlags) *cobra.Command {
      and validated result URL composition
 
 There is no supported generic live website search API. The public-site search
-flow is path-shaped and session-backed, so live use must go through the
-explicit subcommands instead of a free-text API query.`,
+flow is path-shaped and session-backed, so live use goes through the explicit
+subcommands instead of a free-text API query.`,
 		Example: `  # Local FTS only
   idealista-pp-cli search "lisboa" --data-source local
   idealista-pp-cli search local "lisboa"
@@ -38,6 +38,8 @@ explicit subcommands instead of a free-text API query.`,
   idealista-pp-cli search locations lisboa
   idealista-pp-cli search saved
   idealista-pp-cli search results-url --location-path comprar-casas/lisboa/arroios --min-price 220000 --max-price 750000 --min-size 60 --max-size 120 --bedrooms t2,t3 --bathrooms 2,3 --amenities elevador,garagem
+  idealista-pp-cli search results-live --location-path comprar-casas/lisboa/arroios --max-price 300000 --bedrooms t1,t2,t3 --published-within month --sort precos-asc
+  idealista-pp-cli search totals-live --location-path comprar-casas/lisboa/arroios --max-price 300000
   idealista-pp-cli listing photos 34998327`,
 		Annotations: map[string]string{"mcp:hidden": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -89,6 +91,9 @@ explicit subcommands instead of a free-text API query.`,
 	cmd.AddCommand(locationsCmd)
 	cmd.AddCommand(savedCmd)
 	cmd.AddCommand(newSearchResultsURLCmd(flags))
+	cmd.AddCommand(newSearchResultsLiveCmd(flags))
+	cmd.AddCommand(newSearchTotalsLiveCmd(flags))
+	cmd.AddCommand(newSearchResultsEnrichedCmd(flags))
 	return cmd
 }
 
@@ -274,6 +279,187 @@ func outputWebsiteSearchPayload(cmd *cobra.Command, flags *rootFlags, payload an
 	}
 	printProvenance(cmd, 1, prov)
 	return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
+}
+
+func newSearchResultsLiveCmd(flags *rootFlags) *cobra.Command {
+	return newSearchListingAjaxCmd(flags, "results-live", false)
+}
+
+func newSearchTotalsLiveCmd(flags *rootFlags) *cobra.Command {
+	return newSearchListingAjaxCmd(flags, "totals-live", true)
+}
+
+func newSearchListingAjaxCmd(flags *rootFlags, use string, totals bool) *cobra.Command {
+	var spec searchResultsSpec
+	var includeRaw bool
+	var excludeTenanted bool
+
+	short := "Fetch the current website results page and parse listing data"
+	if totals {
+		short = "Fetch the current website results page and extract the total count"
+	}
+	cmd := &cobra.Command{
+		Use:   use,
+		Short: short,
+		Long: `Fetch the canonical Idealista results page built by 'search results-url' and
+parse the current server-rendered listing cards from the HTML. This stays
+website-native, avoids browser automation, and tracks the live contract even
+when older AJAX endpoints drift out of use.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			derived, err := buildSearchResultsState(spec, currentBaseURL(flags))
+			if err != nil {
+				return usageErr(err)
+			}
+			path := derived.RelativeURL
+			url := strings.TrimRight(currentBaseURL(flags), "/") + path
+			payload := map[string]any{
+				"url":            url,
+				"path":           path,
+				"validated_spec": spec,
+			}
+			if dryRunOK(flags) {
+				payload["dry_run"] = true
+				return printJSONFiltered(cmd.OutOrStdout(), payload, flags)
+			}
+			c, err := flags.newClient()
+			if err != nil {
+				return err
+			}
+			if err := validateResultsPagePath(path); err != nil {
+				return usageErr(err)
+			}
+			data, err := fetchListingResultsPage(cmd.Context(), c, path)
+			if err != nil {
+				return classifyResultsPageError(err, url, flags)
+			}
+			if totals {
+				payload := summarizeListingResultsTotals(url, path, spec, data, includeRaw)
+				if excludeTenanted {
+					cards := excludeTenantedCards(parseListingCards(data))
+					payload["filtered_card_count"] = len(cards)
+					payload["filter_exclude_tenanted"] = true
+				}
+				return outputWebsiteSearchPayload(cmd, flags, payload, DataProvenance{Source: "live"})
+			}
+			payloadResults := summarizeListingResultsPage(url, path, spec, data, includeRaw)
+			if excludeTenanted {
+				payloadResults.Cards = excludeTenantedCards(payloadResults.Cards)
+				payloadResults.CardCount = len(payloadResults.Cards)
+			}
+			return outputWebsiteSearchPayload(cmd, flags, payloadResults, DataProvenance{Source: "live"})
+		},
+	}
+	cmd.Flags().StringVar(&spec.LocationPath, "location-path", "", "Required location path like comprar-casas/lisboa/arroios")
+	cmd.Flags().IntVar(&spec.MinPrice, "min-price", 0, "Validated minimum price filter")
+	cmd.Flags().IntVar(&spec.MaxPrice, "max-price", 0, "Validated maximum price filter")
+	cmd.Flags().IntVar(&spec.MinSize, "min-size", 0, "Validated minimum area filter")
+	cmd.Flags().IntVar(&spec.MaxSize, "max-size", 0, "Validated maximum area filter")
+	cmd.Flags().StringSliceVar(&spec.Bedrooms, "bedrooms", nil, "Validated room bands (t0,t1,t2,t3,t4-t5)")
+	cmd.Flags().IntSliceVar(&spec.Bathrooms, "bathrooms", nil, "Validated bathroom counts (1,2,3)")
+	cmd.Flags().StringSliceVar(&spec.Amenities, "amenities", nil, "Validated amenity filters (elevador,garagem,arrecadacao,arcondicionado,roupeiros-embutidos,vista-mar)")
+	cmd.Flags().StringVar(&spec.EnergyClass, "energy-class", "", "Validated energy class (alta,media,baixa)")
+	cmd.Flags().StringVar(&spec.PublishedWithin, "published-within", "", "Validated recency window (48h,week,month)")
+	cmd.Flags().StringVar(&spec.Sort, "sort", "", "Validated sort order (preco_medio-asc, precos-asc, atualizado-desc)")
+	cmd.Flags().BoolVar(&includeRaw, "raw-body", false, "Include the raw AJAX response body for debugging")
+	cmd.Flags().BoolVar(&excludeTenanted, "exclude-tenanted", false, "Exclude listings marked or described as rented / tenant-occupied")
+	_ = cmd.MarkFlagRequired("location-path")
+	return cmd
+}
+
+func newSearchResultsEnrichedCmd(flags *rootFlags) *cobra.Command {
+	var spec searchResultsSpec
+	var shortlistLimit int
+	var excludeTenanted bool
+
+	cmd := &cobra.Command{
+		Use:   "results-enriched",
+		Short: "Fetch result cards first, then enrich a bounded shortlist of listings",
+		Long: `Fetch the canonical website results page, parse current listing cards from the
+HTML, and enrich only a bounded shortlist through the existing listing detail
+endpoints. This stays website-native and conservative by default instead of
+fan-out over every result on the page.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			derived, err := buildSearchResultsState(spec, currentBaseURL(flags))
+			if err != nil {
+				return usageErr(err)
+			}
+			url := strings.TrimRight(currentBaseURL(flags), "/") + derived.RelativeURL
+			payload := map[string]any{
+				"url":             url,
+				"path":            derived.RelativeURL,
+				"validated_spec":  spec,
+				"shortlist_limit": shortlistLimit,
+			}
+			if dryRunOK(flags) {
+				payload["dry_run"] = true
+				return printJSONFiltered(cmd.OutOrStdout(), payload, flags)
+			}
+			c, err := flags.newClient()
+			if err != nil {
+				return err
+			}
+			if err := validateResultsPagePath(derived.RelativeURL); err != nil {
+				return usageErr(err)
+			}
+			data, err := fetchListingResultsPage(cmd.Context(), c, derived.RelativeURL)
+			if err != nil {
+				return classifyResultsPageError(err, url, flags)
+			}
+			page := summarizeListingResultsPageBody(data)
+			cards := parseListingCards(data)
+			if excludeTenanted {
+				cards = excludeTenantedCards(cards)
+			}
+			selectedCards := shortlistCards(cards, shortlistLimit)
+			enriched := make([]listingInspectSummary, 0, len(selectedCards))
+			partialErrors := make([]string, 0)
+			for _, card := range selectedCards {
+				summary, inspectErr := inspectListing(cmd.Context(), c, flags, card.ListingID, "", false)
+				if inspectErr != nil {
+					partialErrors = append(partialErrors, fmt.Sprintf("%s: %v", card.ListingID, inspectErr))
+					continue
+				}
+				if summary.Title == "" {
+					summary.Title = card.Title
+				}
+				if summary.Address == "" {
+					summary.Address = card.Address
+				}
+				if summary.PrimaryImageURL == "" {
+					summary.PrimaryImageURL = card.PrimaryImageURL
+				}
+				enriched = append(enriched, summary)
+			}
+			return outputWebsiteSearchPayload(cmd, flags, listingResultsEnrichedPayload{
+				URL:            url,
+				Path:           derived.RelativeURL,
+				ValidatedSpec:  spec,
+				ResultsTitle:   page.ResultsTitle,
+				TotalCount:     page.TotalCount,
+				ParsedCount:    len(cards),
+				ShortlistLimit: shortlistLimit,
+				SelectedIDs:    selectedListingIDs(selectedCards),
+				Cards:          cards,
+				Listings:       enriched,
+				PartialErrors:  partialErrors,
+			}, DataProvenance{Source: "live"})
+		},
+	}
+	cmd.Flags().StringVar(&spec.LocationPath, "location-path", "", "Required location path like comprar-casas/lisboa/arroios")
+	cmd.Flags().IntVar(&spec.MinPrice, "min-price", 0, "Validated minimum price filter")
+	cmd.Flags().IntVar(&spec.MaxPrice, "max-price", 0, "Validated maximum price filter")
+	cmd.Flags().IntVar(&spec.MinSize, "min-size", 0, "Validated minimum area filter")
+	cmd.Flags().IntVar(&spec.MaxSize, "max-size", 0, "Validated maximum area filter")
+	cmd.Flags().StringSliceVar(&spec.Bedrooms, "bedrooms", nil, "Validated room bands (t0,t1,t2,t3,t4-t5)")
+	cmd.Flags().IntSliceVar(&spec.Bathrooms, "bathrooms", nil, "Validated bathroom counts (1,2,3)")
+	cmd.Flags().StringSliceVar(&spec.Amenities, "amenities", nil, "Validated amenity filters (elevador,garagem,arrecadacao,arcondicionado,roupeiros-embutidos,vista-mar)")
+	cmd.Flags().StringVar(&spec.EnergyClass, "energy-class", "", "Validated energy class (alta,media,baixa)")
+	cmd.Flags().StringVar(&spec.PublishedWithin, "published-within", "", "Validated recency window (48h,week,month)")
+	cmd.Flags().StringVar(&spec.Sort, "sort", "", "Validated sort order (preco_medio-asc, precos-asc, atualizado-desc)")
+	cmd.Flags().IntVar(&shortlistLimit, "shortlist-limit", 3, "Maximum number of parsed listings to enrich")
+	cmd.Flags().BoolVar(&excludeTenanted, "exclude-tenanted", false, "Exclude listings marked or described as rented / tenant-occupied before shortlist enrichment")
+	_ = cmd.MarkFlagRequired("location-path")
+	return cmd
 }
 
 // isNilOrEmpty checks whether a JSON object has nil or empty values for

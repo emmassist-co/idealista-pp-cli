@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "id": "listing-inspect-and-enriched-search",
+  "applied_at": "2026-06-11",
+  "base_run_id": "unknown",
+  "base_printing_press_version": "unknown",
+  "summary": "Add shaped listing inspection and shortlist-first enriched search over the HAR-validated website endpoints.",
+  "reason": "The generated website CLI exposed raw detail and listingajax endpoints, but operators still had to manually parse result bodies and chain several listing detail commands to inspect one listing or enrich a shortlist.",
+  "files": [
+    "internal/cli/listing_photos.go",
+    "internal/cli/listing_inspect.go",
+    "internal/cli/listing_inspect_test.go",
+    "internal/cli/search.go",
+    "internal/cli/search_listingajax.go",
+    "internal/cli/search_test.go",
+    "internal/cli/which.go",
+    "README.md",
+    "SKILL.md"
+  ],
+  "validated_outcome": "The CLI now parses listingajax result cards, aggregates listing detail endpoints through 'listing inspect', supports shortlist-first 'search results-enriched', and passes internal CLI, client, and MCP tests."
+}

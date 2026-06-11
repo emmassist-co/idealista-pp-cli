@@ -27,12 +27,17 @@ type whichEntry struct {
 // `--help`; `which` exists to resolve a natural-language capability
 // query to one of the commands the skill says matter most.
 var whichIndex = []whichEntry{
+	{Command: "cookie setup", Description: "Print the browser workflow for obtaining a website session cookie and optionally open Idealista.pt", Group: "session", WhyItMatters: "Gives operators a concrete path for capturing a usable browser cookie before live reads"},
 	{Command: "cookie check", Description: "Validate the current website session cookie against the live site", Group: "session", WhyItMatters: "Confirms whether the stored or env-backed cookie is still usable"},
 	{Command: "cookie source", Description: "Show where the active website session cookie comes from", Group: "session", WhyItMatters: "Explains whether env or config currently wins"},
 	{Command: "cookie set", Description: "Save a website session cookie into local config", Group: "session", WhyItMatters: "Lets operators persist a supplied browser session locally"},
 	{Command: "search locations", Description: "Location suggestions and location search autocomplete for places like Lisboa or Porto", Group: "search", WhyItMatters: "Turns a place query into the website's live location suggestions"},
 	{Command: "search saved", Description: "Saved searches and session-backed search context", Group: "search", WhyItMatters: "Shows the last saved search URL and total ads from the current website session"},
 	{Command: "search results-url", Description: "Build validated website results URLs with price range, area range, room bands, amenities, recency, energy class, and sort", Group: "search", WhyItMatters: "Builds trustworthy result-page URLs and georeach validation state from the HAR-validated filter subset"},
+	{Command: "search results-live", Description: "Fetch the canonical website results page and parse structured listing cards from the current HTML", Group: "search", WhyItMatters: "Uses the same result-page contract the live site serves now instead of relying on a stale AJAX endpoint"},
+	{Command: "search results-enriched", Description: "Fetch result cards first, then enrich a bounded shortlist through the listing detail endpoints", Group: "search", WhyItMatters: "Creates a low-volume website-native search workflow that returns structured listing data instead of raw HTML"},
+	{Command: "search totals-live", Description: "Fetch the canonical website results page and extract the live result count", Group: "search", WhyItMatters: "Derives the real result count from the same page the website serves now"},
+	{Command: "listing inspect", Description: "Get a shaped listing summary across detail, gallery, configuration, and contact endpoints", Group: "listing", WhyItMatters: "Turns several raw detail endpoints into one listing-level inspection workflow"},
 	{Command: "listing photos", Description: "Get listing photos, primary image, and gallery metadata for a listing ID", Group: "listing", WhyItMatters: "Turns raw detail and gallery endpoints into a usable listing media workflow"},
 	{Command: "addetail-recommendation get_addetail_recommendation", Description: "GET addetail-recommendation {addetail_recommendation_id}", Group: "addetail-recommendation"},
 	{Command: "detail get_datalayer", Description: "GET detail {detail_id} datalayer", Group: "detail"},

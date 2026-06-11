@@ -10,8 +10,8 @@ import (
 	"io"
 	"net/http"
 	"testing"
-	"time"
 
+	"idealista-pp-cli/internal/cliutil"
 	"idealista-pp-cli/internal/config"
 )
 
@@ -33,16 +33,19 @@ func (r *recordingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 }
 
 // newClientWithRecorder builds a minimal *Client wired to a recording
-// transport. The Client is constructed through New() so the unexported
-// limiter and cacheDir fields are initialized, then HTTPClient is
-// swapped out for one whose Transport records every call.
+// transport. It intentionally avoids New(), because these tests verify
+// the request short-circuit behavior even in restricted environments
+// where the browser-impersonating HTTP/3 transport cannot bind UDP.
 func newClientWithRecorder(t *testing.T) (*Client, *recordingRoundTripper) {
 	t.Helper()
 	rec := &recordingRoundTripper{}
-	cfg := &config.Config{BaseURL: "http://example.test"}
-	c := New(cfg, time.Second, 0)
-	c.HTTPClient = &http.Client{Transport: rec}
-	c.NoCache = true
+	c := &Client{
+		BaseURL:    "http://example.test",
+		Config:     &config.Config{BaseURL: "http://example.test"},
+		HTTPClient: &http.Client{Transport: rec},
+		NoCache:    true,
+		limiter:    cliutil.NewAdaptiveLimiter(0),
+	}
 	return c, rec
 }
 
